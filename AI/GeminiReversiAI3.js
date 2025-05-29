@@ -73,6 +73,7 @@ async function playVsRandomBot() {
          let chosenMove = null;
 
          // play_vs_random.mjs (MCTS AI の手番のifブロック内)
+         // ...// play_vs_random.mjs (MCTS AI の手番のifブロック内)
          // ...
          if ((currentPlayer === 1 && isMctsBlack) || (currentPlayer === -1 && !isMctsBlack)) {
             // MCTS AI の手番

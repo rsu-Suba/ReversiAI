@@ -10,7 +10,7 @@ export class MCTSNode {
       this.depth = parent ? parent.depth + 1 : 0;
    }
 
-   bestChild(C_param = 3.5, rng = Math.random) {
+   bestChild(C_param = 5.0, rng = Math.random) {
       let bestScore = -Infinity;
       let bestMoves = [];
       if (Object.keys(this.children).length === 0) {
