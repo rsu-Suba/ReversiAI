@@ -35,7 +35,7 @@ export class MCTSNode {
       return this.getLegalMoves(gameBoardInstance).length === Object.keys(this.children).length;
    }
 
-   bestChild(C_param = Math.sqrt(100)) {
+   bestChild(C_param = Math.sqrt(0.7)) {
       let bestScore = -Infinity;
       let bestMove = null;
 

@@ -120,9 +120,9 @@ export class MCTS {
       while (currentNode !== null) {
          currentNode.visits++;
 
-         if (winner === this.root.currentPlayer) {
+         if (winner === currentNode.currentPlayer) {
             currentNode.wins++;
-         } else if (winner === (this.root.currentPlayer === 1 ? -1 : 1)) {
+         } else if (winner === (currentNode.currentPlayer === 1 ? -1 : 1)) {
             currentNode.wins--;
          }
 

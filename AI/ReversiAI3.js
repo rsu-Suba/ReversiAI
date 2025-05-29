@@ -3,8 +3,10 @@ import { OthelloBoard } from "./OthelloBoard.mjs";
 import { MCTS } from "./MCTS.mjs";
 import { MCTSNode } from "./MCTSNode.mjs";
 
+const matchN = 50;
+
 async function main() {
-   const simsN = 20000;
+   const simsN = 100;
    const saveFilePath = "./mcts_tree.json";
    const gameBoard = new OthelloBoard();
    const mcts = new MCTS(gameBoard);
@@ -79,4 +81,6 @@ async function main() {
    }
 }
 
-main();
+//for (let i = 0; i < matchN; i++) {
+   main();
+//}
