@@ -13,7 +13,7 @@ const saveFileName = "./mcts_tree.msgpack"; // 学習済みMCTSツリーのフ�
 const saveFilePath = path.join(__dirname, saveFileName);
 
 const NUM_GAMES_TO_PLAY = 10; // 対戦させるゲーム数
-const MCTS_SIMS_PER_MOVE = 500; // MCTS AI が1手あたりに行うシミュレーション回数 (学習時より多めに設定してOK)
+const MCTS_SIMS_PER_MOVE = 5000; // MCTS AI が1手あたりに行うシミュレーション回数 (学習時より多めに設定してOK)
 
 async function playVsRandomBot() {
    console.log("--- Starting MCTS AI vs Random Bot Play ---");
