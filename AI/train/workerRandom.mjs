@@ -1,6 +1,7 @@
 import { OthelloBoard } from "./OthelloBoard.mjs";
 import { MCTS } from "./MCTS.mjs";
 import { MCTSNode } from "./MCTSNode.mjs";
+import { formatCurrentDateTime } from "./module.mjs";
 import { parentPort, workerData } from "worker_threads";
 import seedrandom from "seedrandom";
 
@@ -32,7 +33,7 @@ function initializeMCTS(treeDataToLoad) {
          mctsAI2._rebuildNodeMap(mctsAI2.persistentRoot);
          mctsAI2.currentRoot = mctsAI2.persistentRoot;
 
-         console.log(`W${workerSlotId}: Loaded MCTS tree -> ${mctsAI1.nodeMap.size} nodes.`);
+         console.log(`--- Loaded tree -> W${workerSlotId} (${mctsAI1.nodeMap.size} nodes) ---`);
       } catch (e) {
          console.error(`W${workerSlotId}: Failed to load treeData:`, e);
          const initialBoard = new OthelloBoard();
@@ -64,7 +65,8 @@ async function runGameSimulation() {
       return;
    }
    randomBotRng = seedrandom(`${Date.now()}-random-bot-${gameNumber}-${workerSlotId}`);
-   console.log(`W${workerSlotId}: Starting game ${gameNumber} (MCTS AI vs Random Bot).`);
+   console.log("");
+   console.log(`--- Game start vs Random-> W${workerSlotId} G${gameNumber} : ${formatCurrentDateTime()} ---`);
 
    let board = new OthelloBoard();
    const gameMoves = [];
@@ -73,6 +75,7 @@ async function runGameSimulation() {
 
    try {
       const isMCTSBlack = gameNumber % 2 === 0;
+      console.log(`AI is ${isMCTSBlack ? "Black" : "White"}`);
       while (!board.isGameOver() && turnCount < maxTurns) {
          if (shouldTerminate) {
             console.log(`W${workerSlotId}: Terminating game ${gameNumber}.`);

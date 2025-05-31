@@ -1,16 +1,20 @@
+import { config } from "./config.mjs";
+
 export class MCTSNode {
-   constructor(boardState, currentPlayer, parent = null, move = null) {
-      this.boardState = boardState;
+   constructor(boardState, currentPlayer, parent = null, move = null, depth = 0, passedLastTurn = false) {
+      this.boardState = boardState.map((row) => [...row]);
       this.currentPlayer = currentPlayer;
       this.parent = parent;
       this.move = move;
       this.visits = 0;
       this.wins = 0;
       this.children = {};
-      this.depth = parent ? parent.depth + 1 : 0;
+      this.depth = depth;
+      this.passedLastTurn = passedLastTurn;
+      this.untriedMoves = null;
    }
 
-   bestChild(C_param = 100.0, rng = Math.random) {
+   bestChild(C_param = config.cP, rng = Math.random) {
       let bestScore = -Infinity;
       let bestMoves = [];
       if (Object.keys(this.children).length === 0) {
@@ -34,7 +38,7 @@ export class MCTSNode {
    }
 
    isFullyExpanded(gameBoardInstance) {
-      gameBoardInstance.setBoardState(this.boardState, this.currentPlayer);
+      gameBoardInstance.setBoardState(this.boardState, this.currentPlayer, this.passedLastTurn);
       const legalMoves = gameBoardInstance.getLegalMoves();
       return legalMoves.every((move) => JSON.stringify(move) in this.children);
    }
@@ -42,11 +46,7 @@ export class MCTSNode {
    toSerializableObject() {
       const childrenSerializable = {};
       for (const moveStr in this.children) {
-         if (this.children[moveStr] instanceof MCTSNode) {
-            childrenSerializable[moveStr] = this.children[moveStr].toSerializableObject();
-         } else {
-            console.warn(`Non-MCTSNode child found at move ${moveStr}. Skipping serialization.`);
-         }
+         childrenSerializable[moveStr] = this.children[moveStr].toSerializableObject();
       }
       return {
          boardState: this.boardState,
@@ -56,6 +56,7 @@ export class MCTSNode {
          wins: this.wins,
          children: childrenSerializable,
          depth: this.depth,
+         passedLastTurn: this.passedLastTurn,
       };
    }
 
@@ -64,11 +65,13 @@ export class MCTSNode {
          serializableNodeData.boardState,
          serializableNodeData.currentPlayer,
          null,
-         serializableNodeData.move
+         serializableNodeData.move,
+         serializableNodeData.depth,
+         serializableNodeData.passedLastTurn !== undefined ? serializableNodeData.passedLastTurn : false
       );
       node.visits = serializableNodeData.visits;
       node.wins = serializableNodeData.wins;
-      node.depth = serializableNodeData.depth;
+      node.untriedMoves = null;
 
       for (const moveStr in serializableNodeData.children) {
          const childNode = MCTSNode.fromSerializableObject(serializableNodeData.children[moveStr]);
@@ -79,18 +82,19 @@ export class MCTSNode {
    }
 
    merge(otherNode) {
-      if (this === otherNode) return;
-      this.visits += otherNode.visits;
+      if (!otherNode) return;
       this.wins += otherNode.wins;
+      this.visits += otherNode.visits;
+      this.untriedMoves = null;
+
       for (const moveStr in otherNode.children) {
-         const otherChild = otherNode.children[moveStr];
-         if (this.children[moveStr]) {
-            //Same child node, merge child node
-            this.children[moveStr].merge(otherChild);
-         } else {
-            // No same node, add node
-            this.children[moveStr] = otherChild;
-            otherChild.parent = this;
+         if (Object.prototype.hasOwnProperty.call(otherNode.children, moveStr)) {
+            const otherChild = otherNode.children[moveStr];
+            if (this.children[moveStr]) {
+               this.children[moveStr].merge(otherChild);
+            } else {
+               this.children[moveStr] = MCTSNode.fromSerializableObject(otherChild.toSerializableObject(), this);
+            }
          }
       }
    }

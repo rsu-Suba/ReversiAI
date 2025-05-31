@@ -11,9 +11,10 @@ export class OthelloBoard {
       this.passedLastTurn = false;
    }
 
-   setBoardState(boardState, currentPlayer) {
+   setBoardState(boardState, currentPlayer, passedLastTurn) {
       this.board = boardState.map((row) => [...row]);
       this.currentPlayer = currentPlayer;
+      this.passedLastTurn = passedLastTurn;
    }
 
    getBoardState() {
@@ -98,54 +99,56 @@ export class OthelloBoard {
    }
 
    applyMove(move) {
-      const legalMoves = this.getLegalMoves();
-      if (move === null || !this._isValidMove(move[0], move[1], this.currentPlayer)) {
-         if (legalMoves.length === 0) {
+      if (move === null) {
+         const currentLegalMoves = this.getLegalMoves();
+         if (currentLegalMoves.length === 0) {
             if (this.passedLastTurn) {
                this.currentPlayer = 0;
             } else {
                this.passedLastTurn = true;
                this.switchPlayer();
             }
-            return true;
          } else {
-            return false;
+            console.warn(`Attempted to pass for player ${this.currentPlayer} but legal moves exist. Forcing pass.`);
+            this.passedLastTurn = true;
+            this.switchPlayer();
          }
+         return;
       }
 
-      this.board[move[0]][move[1]] = this.currentPlayer;
-      this._flipDiscs(move[0], move[1], this.currentPlayer);
+      const [row, col] = move;
+      if (!this._isValidMove(row, col, this.currentPlayer)) {
+         throw new Error(
+            `Invalid move tried by player ${this.currentPlayer} at (${row}, ${col}). Board state: ${JSON.stringify(
+               this.board
+            )}`
+         );
+      }
+
+      this.board[row][col] = this.currentPlayer;
+      this._flipDiscs(row, col, this.currentPlayer);
       this.passedLastTurn = false;
       this.switchPlayer();
-      const nextPlayerBoard = new OthelloBoard();
-      nextPlayerBoard.setBoardState(this.board, this.currentPlayer);
-      const nextPlayerLegalMoves = nextPlayerBoard.getLegalMoves();
+      const nextPlayerLegalMoves = this.getLegalMoves();
 
       if (nextPlayerLegalMoves.length === 0) {
          this.passedLastTurn = true;
          this.switchPlayer();
+      } else {
+         this.passedLastTurn = false;
       }
-
-      return true;
    }
 
    isGameOver() {
-      const scores = this.getScores();
-      if (scores.black === 0 || scores.white === 0) return true;
-      const emptyCells = this.board.flat().filter((cell) => cell === 0).length;
-      if (emptyCells === 0) return true;
+      if (this.getScores().black + this.getScores().white === 64) return true;
+      if (this.currentPlayer === 0) return true;
 
-      const originalPlayer = this.currentPlayer;
-      const originalBoardState = this.getBoardState();
+      const currentLegalMoves = this.getLegalMoves();
+      this.switchPlayer();
+      const opponentLegalMoves = this.getLegalMoves();
+      this.switchPlayer();
 
-      this.setBoardState(originalBoardState, 1);
-      const blackMoves = this.getLegalMoves().length;
-      this.setBoardState(originalBoardState, -1);
-      const whiteMoves = this.getLegalMoves().length;
-
-      this.setBoardState(originalBoardState, originalPlayer);
-
-      if (blackMoves === 0 && whiteMoves === 0) {
+      if (currentLegalMoves.length === 0 && opponentLegalMoves.length === 0) {
          return true;
       }
 
@@ -198,7 +201,12 @@ export class OthelloBoard {
          boardString += "\n";
       }
       console.log(boardString);
-      console.log(`Current Player: ${this.currentPlayer === 1 ? "Black" : "White"}`);
+
+      if (this.currentPlayer === 0) {
+         console.log("Game Over (2 consecutive passes or full board)");
+      } else {
+         console.log(`Current Player: ${this.currentPlayer === 1 ? "Black" : "White"}`);
+      }
       const scores = this.getScores();
       console.log(`Scores: Black = ${scores.black}, White = ${scores.white}`);
    }
