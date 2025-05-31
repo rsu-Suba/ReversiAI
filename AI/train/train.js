@@ -159,8 +159,8 @@ async function startSelfPlay() {
                if (trainingHours > 0) {
                   const timeLeft = trainingEndTime - new Date();
                   const hours = Math.floor(timeLeft / (1000 * 60 * 60));
-                  const minutes = String(Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60))).padStart(2, '0');
-                  const seconds = String(Math.floor((timeLeft % (1000 * 60)) / 1000)).padStart(2, '0');
+                  const minutes = String(Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60))).padStart(2, "0");
+                  const seconds = String(Math.floor((timeLeft % (1000 * 60)) / 1000)).padStart(2, "0");
                   progress = `Est : ${hours}:${minutes}:${seconds}`;
                }
                console.log(`${progress}\n`);
