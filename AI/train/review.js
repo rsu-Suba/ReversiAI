@@ -2,6 +2,7 @@ import { OthelloBoard } from "./OthelloBoard.mjs";
 import { MCTS } from "./MCTS.mjs";
 import { MCTSNode } from "./MCTSNode.mjs";
 import { config } from "./config.mjs";
+import { config } from "./config.mjs";
 import { fileURLToPath } from "url";
 import * as path from "path";
 import seedrandom from "seedrandom";

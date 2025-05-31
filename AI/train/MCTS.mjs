@@ -1,8 +1,10 @@
 import { MCTSNode } from "./MCTSNode.mjs";
 import { OthelloBoard } from "./OthelloBoard.mjs";
 import { config } from "./config.mjs";
+import { config } from "./config.mjs";
 import { decode, Encoder } from "@msgpack/msgpack";
 import seedrandom from "seedrandom";
+import * as fs from "fs/promises";
 import * as fs from "fs/promises";
 
 export class MCTS {
