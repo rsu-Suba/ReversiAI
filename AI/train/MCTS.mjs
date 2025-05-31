@@ -1,11 +1,12 @@
 import { MCTSNode } from "./MCTSNode.mjs";
-import * as fs from "fs/promises";
 import { OthelloBoard } from "./OthelloBoard.mjs";
+import { config } from "./config.mjs";
 import { decode, Encoder } from "@msgpack/msgpack";
 import seedrandom from "seedrandom";
+import * as fs from "fs/promises";
 
 export class MCTS {
-   constructor(cP = 1.4, rng = Math.random) {
+   constructor(cP = config.cP, rng = Math.random) {
       this.persistentRoot = null;
       this.currentRoot = null;
       this.simGameBoard = new OthelloBoard();

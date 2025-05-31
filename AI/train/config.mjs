@@ -1,0 +1,16 @@
+export const config = {
+   parallel: 6,
+   simsN: 2000,
+   cP: 2,
+   trainingHours: 0.5,
+   matches: 100,
+   vsRandom: false,
+   Mem_Check_Interval: 5000,
+   Mem_Worker_Check_Interval: 3000,
+   Mem_Threshold_Per: 0.9,
+   Mem_Worker_Threshold_Per: 0.85,
+   Mem_Heap_Size: 16384,
+   treeSavePath: "./mcts_tree.msgpack",
+   treeLoadPath: "./mcts_tree.msgpack",
+   treeBackupPath: "./mcts_tree_backup.msgpack",
+};

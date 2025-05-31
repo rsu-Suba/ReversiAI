@@ -1,13 +1,14 @@
 import { OthelloBoard } from "./OthelloBoard.mjs";
 import { MCTS } from "./MCTS.mjs";
 import { MCTSNode } from "./MCTSNode.mjs";
+import { config } from "./config.mjs";
 import { fileURLToPath } from "url";
 import * as path from "path";
 import seedrandom from "seedrandom";
 
 const NUM_GAMES_TO_PLAY = 10;
-const MCTS_SIMS_PER_MOVE = 500;
-const saveFileName = "./mcts_tree.msgpack";
+const MCTS_SIMS_PER_MOVE = 3000;
+const saveFileName = config.treeLoadPath;
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -15,13 +16,11 @@ const saveFilePath = path.join(__dirname, saveFileName);
 
 async function playVsRandomBot() {
    console.log("--- Starting MCTS AI vs Random Bot Play ---");
-   console.log(`Loading MCTS tree from: ${saveFilePath}`);
+   console.log(`Loading Data <- ${saveFileName}`);
    const mcts = new MCTS();
    const loaded = await mcts.loadTree(saveFilePath);
    if (!loaded || !mcts.persistentRoot) {
-      console.error(
-         "Error: MCTS tree can't load."
-      );
+      console.error("Error: MCTS tree can't load.");
       console.error("Run the self-play script first to generate the tree.");
       return;
    }
@@ -75,7 +74,7 @@ async function playVsRandomBot() {
             gameBoard.applyMove(null);
          }
          turnCount++;
-         gameBoard.display();
+         //gameBoard.display();
       }
 
       const winner = gameBoard.getWinner();
