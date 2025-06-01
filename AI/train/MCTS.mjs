@@ -2,6 +2,7 @@ import { MCTSNode } from "./MCTSNode.mjs";
 import { OthelloBoard } from "./OthelloBoard.mjs";
 import { config } from "./config.mjs";
 import { decode, Encoder } from "@msgpack/msgpack";
+import { parentPort  } from "worker_threads";
 import seedrandom from "seedrandom";
 import * as fs from "fs/promises";
 
@@ -31,7 +32,6 @@ export class MCTS {
          this._rebuildNodeMap(this.persistentRoot);
          return true;
       } catch (error) {
-         console.error(`Error loading MCTS Tree from ${filePath}:`, error);
          this.persistentRoot = null;
          this.currentRoot = null;
          this.nodeMap.clear();
@@ -89,11 +89,17 @@ export class MCTS {
             console.log("MCTS.run: Stopping simulations early due as requested.");
             break;
          }
-         if (i % 5 === 0) {
+         if (i % 10 === 0) {
             const memoryUsage = process.memoryUsage();
             const heapUsed = memoryUsage.heapUsed;
             const thresholdBytes = config.Mem_Heap_Size * 1024 * 1024 * config.Mem_Worker_Threshold_Per;
-
+            if (parentPort) {
+               parentPort.postMessage({
+                  type: "worker_status_update",
+                  workerSlotId: this.workerSlotId,
+                  heapUsedMB: Math.floor(heapUsed / 1024 / 1024),
+               });
+            }
             if (heapUsed > thresholdBytes) {
                console.warn(
                   `W${this.workerSlotId}: MCTS.run internal memory limit over. Current: ${Math.floor(

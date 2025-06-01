@@ -93,7 +93,8 @@ export class MCTSNode {
             if (this.children[moveStr]) {
                this.children[moveStr].merge(otherChild);
             } else {
-               this.children[moveStr] = MCTSNode.fromSerializableObject(otherChild.toSerializableObject(), this);
+               //this.children[moveStr] = MCTSNode.fromSerializableObject(otherChild.toSerializableObject(), this);
+               this.children[moveStr] = MCTSNode.fromSerializableObject(otherChild.toSerializableObject());
             }
          }
       }

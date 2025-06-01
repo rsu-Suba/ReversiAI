@@ -1,21 +1,21 @@
 export const config = {
    //Train
    parallel: 4,
-   simsN: 200,
-   cP: 1.4,
+   simsN: 500,
+   cP: 1.8,
    trainingHours: 0,
    matches: 8,
-   vsRandom: true,
+   vsRandom: false,
 
    //Review
-   reviewSimsN: 200,
+   reviewSimsN: 1000,
    reviewMatches: 10,
 
    //common
-   Mem_Check_Interval: 1000,
-   Mem_Worker_Check_Interval: 100,
-   Mem_Threshold_Per: 0.90,
-   Mem_Worker_Threshold_Per: 0.80,
+   Mem_Check_Interval: 200,
+   Mem_Worker_Check_Interval: 50,
+   Mem_Threshold_Per: 0.85,
+   Mem_Worker_Threshold_Per: 0.75,
    Mem_Heap_Size: 8192,
    treeSavePath: "./mcts_tree.msgpack",
    treeLoadPath: "./mcts_tree.msgpack",

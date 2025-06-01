@@ -56,32 +56,16 @@ if (workerData.treeData) {
 function checkWorkerMemoryUsage() {
    const memoryUsage = process.memoryUsage();
    const heapUsed = memoryUsage.heapUsed;
-
-   if (heapUsed > MEMORY_THRESHOLD_BYTES_WORKER) {
-      console.warn(`W${workerSlotId}: Memory limit over. Current: ${Math.floor(heapUsed / 1024 / 1024)}MB`);
-      isGracefulShutdown = true;
-      clearInterval(workerMemoryCheckInterval);
-      parentPort.postMessage({
-         type: "worker_memory_alert",
-         workerSlotId: workerSlotId,
-         treeDataAI1: JSON.stringify(mcts.persistentRoot.toSerializableObject()),
-         treeDataAI2: null,
-         reason: "high_memory_usage_worker",
-      });
-
-      setTimeout(() => {
-         console.log(`W${workerSlotId}: Memory limit -> forced terminate.`);
-         process.exit(1);
-      }, 500);
-   }
+   parentPort.postMessage({
+      type: "worker_status_update",
+      workerSlotId: workerSlotId,
+      heapUsedMB: Math.floor(heapUsed / 1024 / 1024),
+   });
 }
 
 parentPort.on("message", (msg) => {
    if (msg.type === "terminate_now") {
       console.log(`W${workerSlotId}: Terminated.`);
-      clearInterval(workerMemoryCheckInterval);
-      console.log(`W${workerSlotId}: Terminated.`);
-      clearInterval(workerMemoryCheckInterval);
       process.exit(0);
    } else if (msg.type === "start_game") {
       currentWorkerGameNumber = msg.gameNumber;
@@ -123,11 +107,6 @@ async function runSelfPlayGame() {
       mcts.persistentRoot.currentPlayer,
       mcts.persistentRoot.passedLastTurn
    );
-
-   if (workerMemoryCheckInterval) {
-      clearInterval(workerMemoryCheckInterval);
-   }
-   workerMemoryCheckInterval = setInterval(checkWorkerMemoryUsage, MEMORY_CHECK_INTERVAL_MS);
    isGracefulShutdown = false;
    try {
       while (!board.isGameOver() && !isGracefulShutdown && !mcts.shouldStopSimulations) {
@@ -191,12 +170,12 @@ async function runSelfPlayGame() {
          board.applyMove(bestMove);
       }
 
-      clearInterval(workerMemoryCheckInterval);
-
       const scores = board.getScores();
       const winner = scores.black > scores.white ? 1 : scores.white > scores.black ? -1 : 0;
       const finalBoardState = board.getBoardState();
       const serializedTree = JSON.stringify(mcts.persistentRoot.toSerializableObject());
+      const finalMemoryUsage = process.memoryUsage();
+      const finalHeapUsedMB = Math.floor(finalMemoryUsage.heapUsed / 1024 / 1024);
 
       parentPort.postMessage({
          type: "game_finished",
@@ -208,6 +187,7 @@ async function runSelfPlayGame() {
          treeDataAI1: serializedTree,
          treeDataAI2: null,
          finalBoard: finalBoardState,
+         finalHeapUsedMB: finalHeapUsedMB,
       });
    } catch (error) {
       clearInterval(workerMemoryCheckInterval);

@@ -9,7 +9,7 @@ import {
    flipAttackBoard,
    isBoardFull,
    checkPlot,
-   endGame
+   endGame,
 } from "./ReversiModule.mjs";
 import * as readline from "readline";
 
@@ -39,6 +39,7 @@ async function main() {
       displayBoard(board, playerNum, pos);
 
       pos = await inputSelect(board, rl);
+      console.log(pos);
       flips = checkBoard(pos, board, playerNum);
       if (pos === null) {
          console.log("Exit.");

@@ -3,8 +3,10 @@ import { MCTS } from "./MCTS.mjs";
 import { MCTSNode } from "./MCTSNode.mjs";
 import { config } from "./config.mjs";
 import { fileURLToPath } from "url";
+import { inputSelect } from "./module.mjs";
 import * as path from "path";
 import seedrandom from "seedrandom";
+import * as readline from "readline";
 
 const NUM_GAMES_TO_PLAY = config.reviewMatches;
 const MCTS_SIMS_PER_MOVE = config.reviewSimsN;
@@ -14,8 +16,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const saveFilePath = path.join(__dirname, saveFileName);
 
+const rl = readline.createInterface({
+   input: process.stdin,
+   output: process.stdout,
+});
+
 async function playVsRandomBot() {
-   console.log("--- Starting MCTS AI vs Random Bot Play ---");
+   console.log("--- Starting MCTS AI vs Human Play ---");
    console.log(`Loading Data <- ${saveFileName}`);
    const mcts = new MCTS();
    const loaded = await mcts.loadTree(saveFilePath);
@@ -52,6 +59,7 @@ async function playVsRandomBot() {
       const maxTurns = 100;
 
       while (!gameBoard.isGameOver() && turnCount < maxTurns) {
+         gameBoard.display();
          const currentPlayer = gameBoard.currentPlayer;
          const currentBoardState = gameBoard.getBoardState();
          let chosenMove = null;
@@ -72,7 +80,8 @@ async function playVsRandomBot() {
             chosenMove = mctsPlayer.run(currentBoardState, currentPlayer, MCTS_SIMS_PER_MOVE);
             if (chosenMove !== null) mctsPlayer.updateRoot(chosenMove);
          } else {
-            chosenMove = randomBotPlayer.run(currentBoardState, currentPlayer);
+            //Enemy input
+            chosenMove = await inputSelect(currentBoardState, rl, currentPlayer);
          }
          if (chosenMove !== null) {
             gameBoard.applyMove(chosenMove);
@@ -80,18 +89,18 @@ async function playVsRandomBot() {
             gameBoard.applyMove(null);
          }
          turnCount++;
-         gameBoard.display();
       }
 
       const winner = gameBoard.getWinner();
+      gameBoard.display();
 
       let resultMessage = "Draw.";
       if (winner === 1) {
-         resultMessage = `Winner: Black.${isMctsBlack ? "AI" : "Random"}`;
+         resultMessage = `Winner: Black.${isMctsBlack ? "AI" : "Human"}`;
          if (isMctsBlack) mctsWins++;
          else randomBotWins++;
       } else if (winner === -1) {
-         resultMessage = `Winner: White.${isMctsBlack ? "Random" : "AI"}`;
+         resultMessage = `Winner: White.${isMctsBlack ? "Human" : "AI"}`;
          if (!isMctsBlack) mctsWins++;
          else randomBotWins++;
       } else {
