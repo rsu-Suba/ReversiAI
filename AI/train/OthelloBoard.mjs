@@ -1,24 +1,24 @@
 export class OthelloBoard {
    constructor() {
-      this.board = Array(8)
+      this.boardState = Array(8)
          .fill(null)
          .map(() => Array(8).fill(0));
-      this.board[3][3] = 1;
-      this.board[3][4] = -1;
-      this.board[4][3] = -1;
-      this.board[4][4] = 1;
+      this.boardState[3][3] = 1;
+      this.boardState[3][4] = -1;
+      this.boardState[4][3] = -1;
+      this.boardState[4][4] = 1;
       this.currentPlayer = 1;
       this.passedLastTurn = false;
    }
 
    setBoardState(boardState, currentPlayer, passedLastTurn) {
-      this.board = boardState.map((row) => [...row]);
+      this.boardState = boardState.map((row) => [...row]);
       this.currentPlayer = currentPlayer;
       this.passedLastTurn = passedLastTurn;
    }
 
    getBoardState() {
-      return this.board.map((row) => [...row]);
+      return this.boardState.map((row) => [...row]);
    }
 
    switchPlayer() {
@@ -41,14 +41,14 @@ export class OthelloBoard {
          let r = row + dr;
          let c = col + dc;
          const discsToFlip = [];
-         while (r >= 0 && r < 8 && c >= 0 && c < 8 && this.board[r][c] === -player) {
+         while (r >= 0 && r < 8 && c >= 0 && c < 8 && this.boardState[r][c] === -player) {
             discsToFlip.push([r, c]);
             r += dr;
             c += dc;
          }
-         if (r >= 0 && r < 8 && c >= 0 && c < 8 && this.board[r][c] === player) {
+         if (r >= 0 && r < 8 && c >= 0 && c < 8 && this.boardState[r][c] === player) {
             for (const [fr, fc] of discsToFlip) {
-               this.board[fr][fc] = player;
+               this.boardState[fr][fc] = player;
                flippedCount++;
             }
          }
@@ -60,7 +60,7 @@ export class OthelloBoard {
       const legalMoves = [];
       for (let r = 0; r < 8; r++) {
          for (let c = 0; c < 8; c++) {
-            if (this.board[r][c] === 0) {
+            if (this.boardState[r][c] === 0) {
                if (this._isValidMove(r, c, this.currentPlayer)) {
                   legalMoves.push([r, c]);
                }
@@ -71,7 +71,7 @@ export class OthelloBoard {
    }
 
    _isValidMove(row, col, player) {
-      if (this.board[row][col] !== 0) return false;
+      if (this.boardState[row][col] !== 0) return false;
       const directions = [
          [-1, -1],
          [-1, 0],
@@ -86,12 +86,12 @@ export class OthelloBoard {
          let r = row + dr;
          let c = col + dc;
          let foundOpponent = false;
-         while (r >= 0 && r < 8 && c >= 0 && c < 8 && this.board[r][c] === -player) {
+         while (r >= 0 && r < 8 && c >= 0 && c < 8 && this.boardState[r][c] === -player) {
             foundOpponent = true;
             r += dr;
             c += dc;
          }
-         if (foundOpponent && r >= 0 && r < 8 && c >= 0 && c < 8 && this.board[r][c] === player) {
+         if (foundOpponent && r >= 0 && r < 8 && c >= 0 && c < 8 && this.boardState[r][c] === player) {
             return true;
          }
       }
@@ -120,12 +120,12 @@ export class OthelloBoard {
       if (!this._isValidMove(row, col, this.currentPlayer)) {
          throw new Error(
             `Invalid move tried by player ${this.currentPlayer} at (${row}, ${col}). Board state: ${JSON.stringify(
-               this.board
+               this.boardState
             )}`
          );
       }
 
-      this.board[row][col] = this.currentPlayer;
+      this.boardState[row][col] = this.currentPlayer;
       this._flipDiscs(row, col, this.currentPlayer);
       this.passedLastTurn = false;
       this.switchPlayer();
@@ -174,9 +174,9 @@ export class OthelloBoard {
       let white = 0;
       for (let r = 0; r < 8; r++) {
          for (let c = 0; c < 8; c++) {
-            if (this.board[r][c] === 1) {
+            if (this.boardState[r][c] === 1) {
                black++;
-            } else if (this.board[r][c] === -1) {
+            } else if (this.boardState[r][c] === -1) {
                white++;
             }
          }
@@ -189,7 +189,7 @@ export class OthelloBoard {
       for (let r = 0; r < 8; r++) {
          boardString += `${r} `;
          for (let c = 0; c < 8; c++) {
-            const cell = this.board[r][c];
+            const cell = this.boardState[r][c];
             if (cell === 1) {
                boardString += "🔴";
             } else if (cell === -1) {

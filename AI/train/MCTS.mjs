@@ -2,7 +2,7 @@ import { MCTSNode } from "./MCTSNode.mjs";
 import { OthelloBoard } from "./OthelloBoard.mjs";
 import { config } from "./config.mjs";
 import { decode, Encoder } from "@msgpack/msgpack";
-import { parentPort  } from "worker_threads";
+import { parentPort } from "worker_threads";
 import seedrandom from "seedrandom";
 import * as fs from "fs/promises";
 
@@ -185,7 +185,7 @@ export class MCTS {
    }
 
    expand(node) {
-      const maxTreeDepth = 60;
+      const maxTreeDepth = 100;
       if (node.depth >= maxTreeDepth) return node;
 
       this.simGameBoard.setBoardState(node.boardState, node.currentPlayer, node.passedLastTurn);
@@ -209,7 +209,8 @@ export class MCTS {
          nextBoard.passedLastTurn
       );
       node.children[JSON.stringify(moveToExpand)] = newNode;
-      this.nodeMap.set(JSON.stringify(newNode.boardState) + "_" + newNode.currentPlayer, newNode);
+      //this.nodeMap.set(JSON.stringify(newNode.boardState) + "_" + newNode.currentPlayer, newNode);
+      this.nodeMap.set(newNode.getBoardStateKey(), newNode);
       this.simGameBoard.setBoardState(newNode.boardState, newNode.currentPlayer, newNode.passedLastTurn);
 
       return newNode;
@@ -219,7 +220,7 @@ export class MCTS {
       const simulationBoard = new OthelloBoard();
       simulationBoard.setBoardState(node.boardState, node.currentPlayer, node.passedLastTurn);
 
-      const maxSimulationDepth = 60;
+      const maxSimulationDepth = 100;
       let currentSimulationDepth = 0;
 
       while (!simulationBoard.isGameOver() && currentSimulationDepth < maxSimulationDepth) {
@@ -242,18 +243,14 @@ export class MCTS {
       let currentNode = node;
       while (currentNode !== null) {
          currentNode.visits++;
-
          const blackStones = scores.black;
          const whiteStones = scores.white;
-
          let winLossReward = 0;
          if (winner === currentNode.currentPlayer) {
             winLossReward = 1;
          } else if (winner === -currentNode.currentPlayer) {
             winLossReward = -1;
          } else if (winner === 0) {
-            winLossReward = -0.5;
-         } else {
             winLossReward = 0;
          }
 
@@ -263,10 +260,14 @@ export class MCTS {
          } else {
             stoneDiffReward = (whiteStones - blackStones) / 64;
          }
-
-         const finalReward = (winLossReward * 2 + stoneDiffReward * 1) / 3;
+         const stoneDifferenceWeight = 5;
+         const winLossWeight = 1;
+         const finalReward =
+            (winLossReward * winLossWeight + stoneDiffReward * stoneDifferenceWeight) /
+            (winLossWeight + stoneDifferenceWeight);
 
          currentNode.wins += finalReward;
+         //console.log(`Win rate: ${Math.round((currentNode.wins/currentNode.visits) * 100) / 100}`);
          currentNode = currentNode.parent;
       }
    }
@@ -299,6 +300,7 @@ export class MCTS {
                nextBoard.passedLastTurn
             );
             this.currentRoot.children[moveStr] = nextRootNode;
+            /*
             this.nodeMap.set(
                JSON.stringify(nextRootNode.boardState) +
                   "_" +
@@ -307,6 +309,8 @@ export class MCTS {
                   nextRootNode.passedLastTurn,
                nextRootNode
             );
+            */
+            this.nodeMap.set(nextRootNode.getBoardStateKey(), nextRootNode);
          }
       }
       if (nextRootNode) {

@@ -80,7 +80,7 @@ async function playVsRandomBot() {
             gameBoard.applyMove(null);
          }
          turnCount++;
-         gameBoard.display();
+         //gameBoard.display();
       }
 
       const winner = gameBoard.getWinner();

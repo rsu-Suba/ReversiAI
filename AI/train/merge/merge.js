@@ -8,9 +8,9 @@ import { mergeFiles, outputFile } from "./mergeConfig.mjs";
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-let treeFilePaths;
+let treeFilePaths = [""];
 for (let i = 0; i < mergeFiles.length; i++) {
-   treeFilePaths.push = path.join(__dirname, mergeFiles[i]);
+   treeFilePaths[i] = path.join(__dirname, mergeFiles[i]);
 }
 const outputFilePath = path.join(__dirname, outputFile);
 

@@ -99,4 +99,8 @@ export class MCTSNode {
          }
       }
    }
+
+   getBoardStateKey() {
+      return JSON.stringify(this.boardState) + "_" + this.currentPlayer + "_" + this.passedLastTurn;
+   }
 }

@@ -1,4 +1,4 @@
-const mergeFiles = ["T1.msgpack", "T2.msgpack", "T3.msgpack"];
-const outputFile = "TMerged.msgpack";
+const mergeFiles = ["T20.msgpack", "T50.msgpack"];
+const outputFile = "T70Merged.msgpack";
 
 export { mergeFiles, outputFile };
