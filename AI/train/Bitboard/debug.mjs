@@ -1,10 +1,10 @@
 function boardDisplay(playerBoard) {
-   const binaryString = playerBoard.toString(2).padStart(36, "0");
+   const binaryString = playerBoard.toString(2).padStart(64, "0");
    const reversedString = binaryString.split("").reverse().join("");
    let result = "";
    for (let i = 0; i < reversedString.length; i++) {
       result += reversedString[i];
-      if ((i + 1) % 6 === 0 && i + 1 !== reversedString.length) {
+      if ((i + 1) % 8 === 0 && i + 1 !== reversedString.length) {
          result += " ";
       }
    }
