@@ -58,13 +58,10 @@ export class MergeMCTSTreeManager {
          console.log("[Merge Tree] Merged tree -> empty");
          return;
       }
-      console.log(
-         `[Merge Tree] Starting merge. ${this.nodeMap.size} nodes + ${otherTreeManager.nodeMap.size} nodes`
-      );
       this.rootNode.merge(otherTreeManager.rootNode);
+      const finalBeforeRebuildNodes = this.nodeMap.size;
       this._rebuildNodeMap(this.rootNode);
-
-      console.log(`[Merge Tree] Merge done. -> ${this.nodeMap.size} nodes`);
+      console.log(`MCTS: Node merged ${finalBeforeRebuildNodes} -> ${this.nodeMap.size}`);
    }
 
    _rebuildNodeMap(rootNode) {

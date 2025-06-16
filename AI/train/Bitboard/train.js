@@ -44,23 +44,13 @@ let currentCPUUsagePer = 0;
 let resCheckInterval;
 
 const mainMCTSRng = seedrandom(`main-mcts-seed-${Date.now()}-${Math.random()}`);
-console.log(
-   `[DEBUG MCTS Init] OthelloBoard.blackInitBoard type: ${typeof OthelloBoard.blackInitBoard}, value: ${
-      OthelloBoard.blackInitBoard
-   }`
-);
-console.log(
-   `[DEBUG MCTS Init] OthelloBoard.whiteInitBoard type: ${typeof OthelloBoard.whiteInitBoard}, value: ${
-      OthelloBoard.whiteInitBoard
-   }`
-);
 
 const mcts = new MCTS(
    cP,
    mainMCTSRng,
    "main",
-   OthelloBoard.blackInitBoard, // ★ここ
-   OthelloBoard.whiteInitBoard, // ★ここ
+   OthelloBoard.blackInitBoard,
+   OthelloBoard.whiteInitBoard,
    1,
    false
 );
@@ -154,10 +144,9 @@ async function startSelfPlay() {
       console.log(`Total Games: ${totalGames}`);
    }
    console.log(`Loading MCTS tree <- ${saveFileName}`);
-   //mainTreeManager.setRootNode(mcts.persistentRoot);
    await loadMCTSTree(mainTreeManager, saveFilePath, backupFilePath);
    mcts.persistentRoot = mainTreeManager.getRootNode();
-   mcts._rebuildNodeMap(mcts.persistentRoot); // MCTSのnodeMapも再構築
+   mcts._rebuildNodeMap(mcts.persistentRoot);
    logResorceUsage();
    memoryCheckInterval = setInterval(checkMemoryUsage, MEMORY_CHECK_INTERVAL_MS);
    resCheckInterval = setInterval(logResorceUsage, 1000 * 25);
@@ -452,7 +441,7 @@ async function loadMCTSTree(treeManagerInstance, primaryPath, backupPath) {
       );
       treeManagerInstance.setRootNode(initialNode);
       mcts.persistentRoot = treeManagerInstance.getRootNode();
-      mcts._rebuildNodeMap(mcts.persistentRoot); // MCTSのnodeMapも再構築
+      mcts._rebuildNodeMap(mcts.persistentRoot);
       console.log("No MCTS tree -> Creating new tree");
    }
 }

@@ -16,18 +16,15 @@ export class MCTS {
       initialCurrentPlayer = 1,
       initialPassedLastTurn = false
    ) {
-      // initialPassedLastTurn は train.js から渡されるのでそのまま
-
-      const initialBoard = new OthelloBoard(); // このinitialBoardはあくまで一時的なもので、MCTSNode初期化には使われない
-      // MCTSNodeには引数として渡されたinitialBlackDiscsなどを使う
+      const initialBoard = new OthelloBoard();
       this.persistentRoot = new MCTSNode(
          initialBlackDiscs,
          initialWhiteDiscs,
          initialCurrentPlayer,
-         null, // parent
-         null, // move
-         0, // depth
-         initialPassedLastTurn // ★修正: train.jsから渡されるinitialPassedLastTurnを使う★
+         null,
+         null,
+         0,
+         initialPassedLastTurn
       );
       this.currentRoot = this.persistentRoot;
       this.simGameBoard = new OthelloBoard();
@@ -88,44 +85,31 @@ export class MCTS {
 
       if (!rootNode || !(rootNode instanceof MCTSNode)) {
          console.warn("Attempted to rebuild node map with a null or invalid root node. Clearing map.");
-         return; // 無効なルートノードの場合は処理を中止
+         return;
       }
-
       const queue = [rootNode];
-
-      // ルートノードを最初にnodeMapに登録（必須）
       const rootKey = rootNode.getBoardStateKey();
       if (!this.nodeMap.has(rootKey)) {
          this.nodeMap.set(rootKey, rootNode);
       }
-
-      let nodesProcessed = 0; // デバッグ用カウンター
-
+      let nodesProcessed = 0;
       while (queue.length > 0) {
          const node = queue.shift();
-
-         // ここでもう一度厳密なチェック (キューから取り出したノードが有効か)
          if (!node || !(node instanceof MCTSNode)) {
             console.warn(`[Rebuild Warning] Skipped invalid node in queue. Type: ${typeof node}, Value: ${node}`);
             continue;
          }
-
-         // ノードの子を処理
          for (const moveBitStr in node.children) {
             if (Object.prototype.hasOwnProperty.call(node.children, moveBitStr)) {
                const child = node.children[moveBitStr];
-
-               // 子ノードが有効なMCTSNodeインスタンスであることを確認
                if (child && child instanceof MCTSNode) {
                   const childKey = child.getBoardStateKey();
-                  // nodeMap にない場合のみ追加し、キューに入れる
                   if (!this.nodeMap.has(childKey)) {
                      this.nodeMap.set(childKey, child);
-                     queue.push(child); // 新しく追加した子をキューに追加して、さらにその子孫を探索
-                     nodesProcessed++; // カウンターを増やす
+                     queue.push(child);
+                     nodesProcessed++;
                   }
                } else {
-                  // 不正な子ノードが見つかった場合は警告を出す
                   console.warn(
                      `[Rebuild Warning] Invalid child found for key "${moveBitStr}" in node "${node.getBoardStateKey()}". Skipping.`
                   );
@@ -135,10 +119,10 @@ export class MCTS {
       }
    }
 
-   run(currentBlackBoard, currentWhiteBoard, currentPlayer, numSimulations) {
+   run(currentBlackBoard, currentWhiteBoard, currentPlayer, numSimulations, currentPassedLastTurn = false) {
       this.shouldStopSimulations = false;
       const currentBoard = new OthelloBoard();
-      currentBoard.setBoardState(currentBlackBoard, currentWhiteBoard, currentPlayer, 0, false); // passCount はMCTSNodeが持つのでここでは初期値false
+      currentBoard.setBoardState(currentBlackBoard, currentWhiteBoard, currentPlayer, 0, false);
       const tempNodeForInitialKey = new MCTSNode(
          currentBlackBoard,
          currentWhiteBoard,
@@ -146,7 +130,7 @@ export class MCTS {
          null,
          null,
          0,
-         currentBoard.passedLastTurn
+         currentPassedLastTurn
       );
       const boardKey = tempNodeForInitialKey.getBoardStateKey();
 
@@ -187,9 +171,10 @@ export class MCTS {
          }
 
          this.simGameBoard.setBoardState(
-            this.currentRoot.currentBlackBoard,
-            this.currentRoot.currentWhiteBoard,
+            this.currentRoot.blackBoard,
+            this.currentRoot.whiteBoard,
             this.currentRoot.currentPlayer,
+            0,
             this.currentRoot.passedLastTurn
          );
          let selectedNode = this.select(this.currentRoot);
@@ -201,6 +186,7 @@ export class MCTS {
             expandedNode.currentBlackBoard,
             expandedNode.currentWhiteBoard,
             expandedNode.currentPlayer,
+            0,
             expandedNode.passedLastTurn
          );
          const simulationResult = this.simulate(expandedNode);
@@ -214,6 +200,7 @@ export class MCTS {
          this.currentRoot.currentBlackBoard,
          this.currentRoot.currentWhiteBoard,
          this.currentRoot.currentPlayer,
+         0,
          this.currentRoot.passedLastTurn
       );
       const legalMovesArray = this.simGameBoard.getLegalMoves();
@@ -253,66 +240,127 @@ export class MCTS {
    }
 
    select(node) {
+      //console.log(`[DEBUG MCTS Select] W${this.workerSlotId}: Starting selection from node ${node.getBoardStateKey()}`); // このログはループ開始時に毎回OK
+      let pathNodes = [node.getBoardStateKey()]; // 辿ったパスを記録したい場合 (任意)
+
       while (!this.simGameBoard.isGameOver() && node.isFullyExpanded(this.simGameBoard)) {
          const bestChildMoveBit = node.bestChild(this.cP, this.rng);
+
          if (bestChildMoveBit == null) {
+            /*
+            console.log(
+               `[DEBUG MCTS Select] W${
+                  this.workerSlotId
+               }: No best child found (null move). Loop break. Path: ${pathNodes.join(" -> ")}`
+            ); // 任意*/
             break;
          }
+
+         // ★修正点: bestChildMoveBitがnullでないことを確認してからログ出力★
+         /*
+         console.log(
+            `[DEBUG MCTS Select] W${
+               this.workerSlotId
+            }: Selected child ${bestChildMoveBit.toString()}. New node depth: ${node.depth}`
+         );*/
+         // ★修正終わり★
+
          node = node.children[bestChildMoveBit.toString()];
-         this.simGameBoard.setBoardState(node.blackBoard, node.whiteBoard, node.currentPlayer, node.passedLastTurn);
-      }
+         pathNodes.push(node.getBoardStateKey()); // 任意
+         this.simGameBoard.setBoardState(node.blackBoard, node.whiteBoard, node.currentPlayer, 0, node.passedLastTurn);
+      } /*
+      console.log(
+         `[DEBUG MCTS Select] W${this.workerSlotId}: Select loop ended. Final node depth: ${
+            node.depth
+         }. Is fully expanded: ${node.isFullyExpanded(this.simGameBoard)}`
+      );*/
       return node;
    }
+   // MCTS.mjs の expand メソッド
 
    expand(node) {
       const maxTreeDepth = 100;
-      if (node.depth >= maxTreeDepth) return node;
-      this.simGameBoard.setBoardState(node.blackBoard, node.whiteBoard, node.currentPlayer, node.passedLastTurn);
-      if (this.simGameBoard.isGameOver()) return node;
+      if (node.depth >= maxTreeDepth) {
+         //console.log(`[DEBUG MCTS Expand] W${this.workerSlotId}: Max depth reached (${node.depth}). Returning.`);
+         return node;
+      }
+
+      this.simGameBoard.setBoardState(node.blackBoard, node.whiteBoard, node.currentPlayer, 0, node.passedLastTurn);
+      if (this.simGameBoard.isGameOver()) {
+         //console.log(`[DEBUG MCTS Expand] W${this.workerSlotId}: Game Over at node ${node.getBoardStateKey()}. Returning.`);
+         return node;
+      }
+
       const legalMovesBitboard = this.simGameBoard.getLegalMovesBitboard();
       const unexpandedMovesBit = [];
       for (let i = 0n; i < BigInt(OthelloBoard.boardSize); i++) {
-         if (((legalMovesBitboard >>> i) & 1n) !== 0n) {
+         if (((legalMovesBitboard >> i) & 1n) !== 0n) {
+            // 合法手ビットボードの各ビットをチェック
             if (!(i.toString() in node.children)) {
+               // 未展開の合法手のみ追加
                unexpandedMovesBit.push(i);
             }
          }
       }
-      if (unexpandedMovesBit.length === 0) return node;
-      const moveToExpandBit = unexpandedMovesBit[Math.floor(this.rng() * unexpandedMovesBit.length)]; // BigInt
+
+      //console.log(`[DEBUG MCTS Expand] W${this.workerSlotId}: Expanding node ${node.getBoardStateKey()}`);
+      //console.log(`[DEBUG MCTS Expand] Legal moves count (from OthelloBoard): ${this.simGameBoard.getLegalMoves().length}`); // 配列で数を確認
+      //console.log(`[DEBUG MCTS Expand] Unexpanded moves count: ${unexpandedMovesBit.length}`);
+
+      if (unexpandedMovesBit.length === 0) {
+         //console.log(`[DEBUG MCTS Expand] W${this.workerSlotId}: Node fully expanded, or no legal moves from OthelloBoard. Returning.`);
+         // ★ MCTSNode.isFullyExpanded が true を返しているのと同じ状態
+         // ここで問題がある可能性が高い。本当に合法手がないか、isFullyExpandedが誤判定
+         return node;
+      }
+
+      const moveToExpandBit = unexpandedMovesBit[Math.floor(this.rng() * unexpandedMovesBit.length)];
       const nextBoard = new OthelloBoard();
-      nextBoard.setBoardState(node.blackBoard, node.whiteBoard, node.currentPlayer, node.passedLastTurn);
-      nextBoard.applyMove(moveToExpandBit);
+      nextBoard.setBoardState(node.blackBoard, node.whiteBoard, node.currentPlayer, 0, node.passedLastTurn);
+      nextBoard.applyMove(moveToExpandBit); // この中でnextBoardのpassCountが更新される
+
       const newNode = new MCTSNode(
          nextBoard.blackBoard,
          nextBoard.whiteBoard,
          nextBoard.currentPlayer,
-         node,
+         node, // 親ノードを設定
          moveToExpandBit,
          node.depth + 1,
-         nextBoard.passedLastTurn
+         nextBoard.passedLastTurn // OthelloBoardのpassCountから変換
       );
+      // 新しいノードを親（node）の子として追加
       node.children[moveToExpandBit.toString()] = newNode;
+      // nodeMapにも追加
       this.nodeMap.set(newNode.getBoardStateKey(), newNode);
+      // simGameBoard の状態を newNode に更新
       this.simGameBoard.setBoardState(
          newNode.blackBoard,
          newNode.whiteBoard,
          newNode.currentPlayer,
+         0,
          newNode.passedLastTurn
       );
-
+      /*
+      console.log(
+         `[DEBUG MCTS Expand] W${this.workerSlotId}: Expanded move ${moveToExpandBit.toString()} (row:${Math.floor(
+            Number(moveToExpandBit) / OthelloBoard.boardLength
+         )}, col:${Number(moveToExpandBit) % OthelloBoard.boardLength}) to new node. Node map size: ${
+            this.nodeMap.size
+         }. New node depth: ${newNode.depth}`
+      );
+      */
       return newNode;
    }
 
    simulate(node) {
       const simulationBoard = new OthelloBoard();
-      simulationBoard.setBoardState(node.blackBoard, node.whiteBoard, node.currentPlayer, node.passedLastTurn);
+      simulationBoard.setBoardState(node.blackBoard, node.whiteBoard, node.currentPlayer, 0, node.passedLastTurn);
 
       const maxSimulationDepth = 100;
       let currentSimulationDepth = 0;
 
       while (!simulationBoard.isGameOver() && currentSimulationDepth < maxSimulationDepth) {
-         const legalMovesBitboard = simulationBoard.getLegalMovesBitboard(); // ビットボードで合法手を取得
+         const legalMovesBitboard = simulationBoard.getLegalMovesBitboard();
          const legalMovesArray = [];
          for (let i = 0n; i < BigInt(OthelloBoard.boardSize); i++) {
             if (((legalMovesBitboard >> i) & 1n) !== 0n) {
@@ -361,7 +409,6 @@ export class MCTS {
             (winLossWeight + stoneDifferenceWeight);
 
          currentNode.wins += finalReward;
-         //console.log(`Win rate: ${Math.round((currentNode.wins/currentNode.visits) * 100) / 100}`);
          currentNode = currentNode.parent;
       }
    }
@@ -373,42 +420,35 @@ export class MCTS {
       }
 
       let nextRootNode = null;
-      const moveBitStr = moveBit.toString(); // キーはBigIntの文字列化
+      const moveBitStr = moveBit.toString();
 
       if (this.currentRoot.children[moveBitStr]) {
-         // 子ノードが既存の場合
          nextRootNode = this.currentRoot.children[moveBitStr];
       } else {
-         // ★★★子ノードが存在しない場合、新しく作成してツリーに連結する★★★
          const nextBoard = new OthelloBoard();
          nextBoard.setBoardState(
             this.currentRoot.blackBoard,
             this.currentRoot.whiteBoard,
             this.currentRoot.currentPlayer,
+            0,
             this.currentRoot.passedLastTurn
          );
-         nextBoard.applyMove(moveBit); // 手を適用して次の盤面を計算
-
-         // 新しいMCTSNodeを作成
+         nextBoard.applyMove(moveBit);
          nextRootNode = new MCTSNode(
             nextBoard.blackBoard,
             nextBoard.whiteBoard,
             nextBoard.currentPlayer,
-            this.currentRoot, // 親を現在のルートに設定
-            moveBit, // この手で到達した
+            this.currentRoot,
+            moveBit,
             this.currentRoot.depth + 1,
-            nextBoard.passedLastTurn // OthelloBoardのpassCountから変換
+            nextBoard.passedLastTurn
          );
-
-         // 新しいノードを親（currentRoot）の子として追加
          this.currentRoot.children[moveBitStr] = nextRootNode;
-         // nodeMap にも追加
          this.nodeMap.set(nextRootNode.getBoardStateKey(), nextRootNode);
-         // ★★★修正終わり★★★
       }
 
       if (nextRootNode) {
-         this.currentRoot = nextRootNode; // currentRootを新しいノードに移動
+         this.currentRoot = nextRootNode;
       }
    }
 

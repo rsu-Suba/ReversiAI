@@ -1,3 +1,4 @@
+import { OthelloBoard } from "./OthelloBoard.mjs";
 import { config } from "./config.mjs";
 
 export class MCTSNode {
@@ -40,10 +41,10 @@ export class MCTSNode {
    }
 
    isFullyExpanded(gameBoardInstance) {
-      gameBoardInstance.setBoardState(this.blackBoard, this.whiteBoard, this.currentPlayer, this.passedLastTurn);
+      gameBoardInstance.setBoardState(this.blackBoard, this.whiteBoard, this.currentPlayer, 0, this.passedLastTurn);
       const legalMovesBitboard = gameBoardInstance.getLegalMovesBitboard();
       for (let i = 0n; i < BigInt(OthelloBoard.boardSize); i++) {
-         if (((legalMovesBitboard >>> i) & 1n) !== 0n) {
+         if (((legalMovesBitboard >> i) & 1n) !== 0n) {
             if (!(i.toString() in this.children)) {
                return false;
             }

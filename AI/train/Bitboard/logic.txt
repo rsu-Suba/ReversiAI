@@ -1,6 +1,0 @@
-main:
-getLegalMoves x 2
-input <-> input & getLegalMoves == 1n
-getFlips
-applyFlips(plot, flippling)
-display

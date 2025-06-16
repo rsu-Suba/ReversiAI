@@ -1,15 +1,15 @@
 export const config = {
    //Train
    parallel: 4,
-   simsN: 100,
-   cP: 1.4,
+   simsN: 2000,
+   cP: 4.5,
    trainingHours: 0,
-   matches: 4,
+   matches: 10,
    vsRandom: false,
 
    //Review
    reviewSimsN: 1000,
-   reviewMatches: 10,
+   reviewMatches: 2,
 
    //common
    Mem_Check_Interval: 200,

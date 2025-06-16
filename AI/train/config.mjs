@@ -1,8 +1,8 @@
 export const config = {
    //Train
    parallel: 4,
-   simsN: 1000,
-   cP: 4.0,
+   simsN: 300,
+   cP: 1.4,
    trainingHours: 0,
    matches: 100,
    vsRandom: false,
@@ -16,7 +16,7 @@ export const config = {
    Mem_Worker_Check_Interval: 50,
    Mem_Threshold_Per: 0.85,
    Mem_Worker_Threshold_Per: 0.75,
-   Mem_Heap_Size: 4096,
+   Mem_Heap_Size: 8192,
    treeSavePath: "./mcts_tree.msgpack",
    treeLoadPath: "./mcts_tree.msgpack",
    treeBackupPath: "./mcts_tree_backup.msgpack",

@@ -5,6 +5,7 @@ import { config } from "./config.mjs";
 import { formatCurrentDateTime } from "./module.mjs";
 import { parentPort, workerData } from "worker_threads";
 import seedrandom from "seedrandom";
+import * as fs from "fs";
 
 let currentWorkerGameNumber = workerData.gameNumber;
 
@@ -19,27 +20,19 @@ const MAX_HEAP_SIZE_MB = config.Mem_Heap_Size;
 const MAX_HEAP_SIZE_BYTES_WORKER = MAX_HEAP_SIZE_MB * 1024 * 1024;
 const MEMORY_THRESHOLD_BYTES_WORKER = MAX_HEAP_SIZE_BYTES_WORKER * MEMORY_THRESHOLD_PERCENT;
 
+const LOG_FILE_PATH = `./worker_${workerSlotId}_game_log.txt`;
+
 let workerMemoryCheckInterval;
 let isGracefulShutdown = false;
 
 const rng = seedrandom(`seed-${workerSlotId}-${Date.now()}-${Math.random()}`);
-console.log(
-   `[DEBUG MCTS Init] OthelloBoard.blackInitBoard type: ${typeof OthelloBoard.blackInitBoard}, value: ${
-      OthelloBoard.blackInitBoard
-   }`
-);
-console.log(
-   `[DEBUG MCTS Init] OthelloBoard.whiteInitBoard type: ${typeof OthelloBoard.whiteInitBoard}, value: ${
-      OthelloBoard.whiteInitBoard
-   }`
-);
 
 let mcts = new MCTS(
    cP,
    rng,
    workerSlotId,
-   OthelloBoard.blackInitBoard, // ★ここ
-   OthelloBoard.whiteInitBoard, // ★ここ
+   OthelloBoard.blackInitBoard,
+   OthelloBoard.whiteInitBoard,
    1,
    false
 );
@@ -53,7 +46,6 @@ if (workerData.treeData) {
       console.log(`--- Loaded initial tree -> W${workerSlotId} (${mcts.nodeMap.size} nodes) ---`);
    } catch (e) {
       console.error(`W${workerSlotId}: Failed to load initial treeData:`, e);
-      // ロードエラー時は、MCTSの初期ボードを使ってノードを再初期化
       const initialBoard = new OthelloBoard();
       mcts.persistentRoot = new MCTSNode(
          initialBoard.blackBoard,
@@ -131,12 +123,13 @@ parentPort.on("message", (msg) => {
 
 async function runSelfPlayGame() {
    let board = new OthelloBoard();
-   const gameInitialBoard = new OthelloBoard(); // 新しいボードインスタンスで真の初期盤面を取得
+   const gameInitialBoard = new OthelloBoard();
    board.setBoardState(
-      gameInitialBoard.blackBoard, // ★MCTSNode.initialBlackDiscs ではなく、OthelloBoard の真の初期盤面★
-      gameInitialBoard.whiteBoard, // ★MCTSNode.initialWhiteDiscs ではなく、OthelloBoard の真の初期盤面★
+      gameInitialBoard.blackBoard,
+      gameInitialBoard.whiteBoard,
       gameInitialBoard.currentPlayer,
-      gameInitialBoard.passCount > 0 // passedLastTurn の初期状態は false
+      0,
+      gameInitialBoard.passCount > 0
    );
    const trueInitialMCTSNode = new MCTSNode(
       gameInitialBoard.blackBoard,
@@ -150,16 +143,33 @@ async function runSelfPlayGame() {
    let existingTrueInitialNode = mcts.nodeMap.get(trueInitialMCTSNode.getBoardStateKey());
 
    if (!existingTrueInitialNode) {
-      // 真の初期盤面ノードが nodeMap にない場合（通常はMCTSコンストラクタで入るはずだが、念のため）
-      mcts.persistentRoot.merge(trueInitialMCTSNode); // 統計情報マージ
-      mcts._rebuildNodeMap(mcts.persistentRoot); // nodeMapを更新
-      existingTrueInitialNode = mcts.nodeMap.get(trueInitialMCTSNode.getBoardStateKey()); // 再取得
+      mcts.persistentRoot.merge(trueInitialMCTSNode);
+      mcts._rebuildNodeMap(mcts.persistentRoot);
+      existingTrueInitialNode = mcts.nodeMap.get(trueInitialMCTSNode.getBoardStateKey());
    }
-   // MCTSのcurrentRootを真の初期盤面ノードに設定
    mcts.currentRoot = existingTrueInitialNode;
    isGracefulShutdown = false;
    try {
       while (!board.isGameOver() && !isGracefulShutdown && !mcts.shouldStopSimulations) {
+         const currentBoardData = board.getBoardState();
+         const tempNodeForCurrentKey = new MCTSNode(
+            currentBoardData.blackBoard,
+            currentBoardData.whiteBoard,
+            currentBoardData.currentPlayer,
+            null,
+            null,
+            0,
+            currentBoardData.passedLastTurn
+         );
+         const currentTurnBoardKey = tempNodeForCurrentKey.getBoardStateKey();
+         fs.appendFileSync(
+            LOG_FILE_PATH,
+            `\n--- W${workerSlotId} G${currentWorkerGameNumber} - Turn ${
+               board.getScores().black + board.getScores().white - 4
+            } (Player: ${board.currentPlayer === 1 ? "Black" : "White"}) ---\n`
+         );
+         fs.appendFileSync(LOG_FILE_PATH, `Current board key: "${currentTurnBoardKey}"\n`);
+         fs.appendFileSync(LOG_FILE_PATH, `Key found in nodeMap? ${mcts.nodeMap.has(currentTurnBoardKey)}\n`);
          if (isGracefulShutdown) {
             console.log(
                `W${workerSlotId}: Skipping game G${currentWorkerGameNumber} due to graceful shutdown in progress.`
@@ -174,6 +184,21 @@ async function runSelfPlayGame() {
 
          if (validMovesBit.length === 0) {
             board.applyMove(null);
+            const afterPassBoardData = board.getBoardState();
+            const afterPassNode = new MCTSNode(
+               afterPassBoardData.blackBoard,
+               afterPassBoardData.whiteBoard,
+               afterPassBoardData.currentPlayer,
+               null,
+               null,
+               0,
+               afterPassBoardData.passedLastTurn
+            );
+            console.log(
+               `W${workerSlotId}: Player ${
+                  currentPlayer === 1 ? "Black" : "White"
+               } passed. New board key: "${afterPassNode.getBoardStateKey()}"`
+            );
             continue;
          }
 
@@ -191,11 +216,8 @@ async function runSelfPlayGame() {
                0,
                currentBoardStateForMCTS.passedLastTurn
             );
-
             let existingNode = mcts.nodeMap.get(tempNodeForMCTS.getBoardStateKey());
             if (!existingNode) {
-               // ★このifブロックが重要★
-               // ノードが存在しない場合、persistentRootにマージする
                console.warn(
                   `W${workerSlotId}: Node for key "${tempNodeForMCTS.getBoardStateKey()}" not found initially. Adding it.`
                );
@@ -207,7 +229,8 @@ async function runSelfPlayGame() {
                currentBoardStateForMCTS.blackBoard,
                currentBoardStateForMCTS.whiteBoard,
                currentPlayer,
-               simsN
+               simsN,
+               currentBoardStateForMCTS.passedLastTurn
             );
 
             if (mcts.shouldStopSimulations) {
@@ -221,13 +244,9 @@ async function runSelfPlayGame() {
                bestMove = validMovesBit[Math.floor(rng() * validMovesBit.length)];
             }
          }
-         board.applyMove(bestMove); // 実際にボードの状態を更新
-         // ★修正: MCTS.updateRoot(bestMove) は、AIが打った手 (AIの手番) の後にのみ呼び出す ★
-         // AIが打った手で MCTS の currentRoot を更新し、ノードをツリーに接続
-         if (!(vsRandom && currentPlayer === -1)) {
-            // ランダムボットの手番でなければ
-            mcts.updateRoot(bestMove);
-         }
+         board.applyMove(bestMove);
+         mcts.updateRoot(bestMove);
+         fs.fsyncSync(fs.openSync(LOG_FILE_PATH, "a"));
       }
       clearInterval(workerMemoryCheckInterval);
 

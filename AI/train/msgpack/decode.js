@@ -9,8 +9,8 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 // --- 設定 ---
-const inputMsgpackPath = path.join(__dirname, "../merge/T20.msgpack");
-const outputJsonPath = path.join(__dirname, "./T20.json"); // null にするとコンソール出力のみ
+const inputMsgpackPath = path.join(__dirname, "./mcts_tree_backup.msgpack");
+const outputJsonPath = path.join(__dirname, "./mcts.json"); // null にするとコンソール出力のみ
 const jsonIndent = 2;
 // --- 設定ここまで ---
 
