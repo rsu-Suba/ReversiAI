@@ -22,13 +22,30 @@ export class MCTSNode {
       if (Object.keys(this.children).length === 0) {
          return null;
       }
+      if (this.visits < 2) {
+         let minVisits = Infinity;
+         for (const moveBitStr in this.children) {
+            const child = this.children[moveBitStr];
+            if (child.visits < minVisits) {
+               minVisits = child.visits;
+               bestMoves = [BigInt(moveBitStr)];
+            } else if (child.visits === minVisits) {
+               bestMoves.push(BigInt(moveBitStr));
+            }
+         }
+         return bestMoves[Math.floor(rng() * bestMoves.length)];
+      }
+
       for (const moveBitStr in this.children) {
          if (Object.prototype.hasOwnProperty.call(this.children, moveBitStr)) {
             const child = this.children[moveBitStr];
-            const uctScore =
-               child.visits === 0
-                  ? Infinity
-                  : child.wins / child.visits + C_param * Math.sqrt(Math.log(this.visits) / child.visits);
+            if (child.visits === 0) {
+               return BigInt(moveBitStr);
+            }
+            const exploitation = child.wins / child.visits;
+            const exploration = C_param * Math.sqrt(Math.log(this.visits) / child.visits);
+            const uctScore = exploitation + exploration;
+
             if (uctScore > bestScore) {
                bestScore = uctScore;
                bestMoves = [BigInt(moveBitStr)];
@@ -37,6 +54,8 @@ export class MCTSNode {
             }
          }
       }
+
+      if (bestMoves.length === 0) return null;
       return bestMoves[Math.floor(rng() * bestMoves.length)];
    }
 
@@ -116,5 +135,29 @@ export class MCTSNode {
       return `${this.blackBoard.toString(16)}_${this.whiteBoard.toString(16)}_${this.currentPlayer}_${
          this.passedLastTurn
       }`;
+   }
+
+   prune(maxDepth, newNodeMap = new Map(), currentDepth = 0) {
+      const newNode = new MCTSNode(
+         this.blackBoard,
+         this.whiteBoard,
+         this.currentPlayer,
+         this.parent,
+         this.move,
+         this.wins,
+         this.visits,
+         this.isTerminal,
+         this.passCount,
+         []
+      );
+      newNodeMap.set(newNode.getBoardStateKey(), newNode);
+      if (currentDepth < maxDepth) {
+         for (const child of this.children) {
+            const newChild = child.prune(maxDepth, newNodeMap, currentDepth + 1);
+            newNode.children.push(newChild);
+         }
+      }
+
+      return newNode;
    }
 }

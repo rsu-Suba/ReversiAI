@@ -8058,3 +8058,267 @@ Key found in nodeMap? true
 --- W3 G4 - Turn 4 (Player: Black) ---
 Current board key: "1c08000000_102050000000_1_false"
 Key found in nodeMap? true
+
+--- W3 G4 - Turn 0 (Player: Black) ---
+Current board key: "1008000000_810000000_1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 1 (Player: White) ---
+Current board key: "1c08000000_10000000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 2 (Player: Black) ---
+Current board key: "1408000000_40810000000_1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 3 (Player: White) ---
+Current board key: "4041408000000_810000000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 4 (Player: Black) ---
+Current board key: "4040408000000_3810000000_1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 5 (Player: White) ---
+Current board key: "4241408000000_2810000000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 6 (Player: Black) ---
+Current board key: "4241008000000_2e10000000_1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 7 (Player: White) ---
+Current board key: "4243038000000_e00000000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 8 (Player: Black) ---
+Current board key: "4203038000000_8040e00000000_1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 9 (Player: White) ---
+Current board key: "4223438000000_8040a00000000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 10 (Player: Black) ---
+Current board key: "4223038000000_8040e04000000_1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 11 (Player: White) ---
+Current board key: "42e3838000000_8000604000000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 12 (Player: Black) ---
+Current board key: "42e3038000000_8100e04000000_1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 13 (Player: White) ---
+Current board key: "42e343c040000_8100a00000000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 14 (Player: Black) ---
+Current board key: "42e3438040000_8100a04020000_1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 15 (Player: White) ---
+Current board key: "42e363e040000_8100800020000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 16 (Player: Black) ---
+Current board key: "42e362e040000_8100810220000_1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 17 (Player: White) ---
+Current board key: "42e362e242000_8100810020000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 18 (Player: Black) ---
+Current board key: "42e062e242000_8107810020000_1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 19 (Player: White) ---
+Current board key: "243e0e2e242000_8007010020000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 20 (Player: Black) ---
+Current board key: "243e0e0e242000_8007030420000_1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 21 (Player: White) ---
+Current board key: "3c3e0e0e242000_7030420000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 22 (Player: Black) ---
+Current board key: "3c3e0e0e042000_7030720000_1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 23 (Player: White) ---
+Current board key: "3c3e2e7e042000_5000720000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 24 (Player: Black) ---
+Current board key: "3c1e2e7e042000_40205000720000_1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 25 (Player: White) ---
+Current board key: "3c1e2e7e142800_40205000620000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 26 (Player: Black) ---
+Current board key: "3c1e2e6e042800_40205010721000_1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 27 (Player: White) ---
+Current board key: "3c1e2e7e0c2800_40205000721000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 28 (Player: Black) ---
+Current board key: "3c1e2e7e0c2000_40205000721c00_1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 29 (Player: White) ---
+Current board key: "3c7e6e7e0c2000_40001000721c00_-1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 30 (Player: Black) ---
+Current board key: "3c7e6e76082000_40001008761e00_1_false"
+Key found in nodeMap? true
+
+--- W3 G4 - Turn 31 (Player: White) ---
+Current board key: "3c7e6e76686000_40001008161e00_-1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 0 (Player: Black) ---
+Current board key: "1008000000_810000000_1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 1 (Player: White) ---
+Current board key: "1c08000000_10000000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 2 (Player: Black) ---
+Current board key: "1408000000_40810000000_1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 3 (Player: White) ---
+Current board key: "4041408000000_810000000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 4 (Player: Black) ---
+Current board key: "4040408000000_3810000000_1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 5 (Player: White) ---
+Current board key: "4241408000000_2810000000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 6 (Player: Black) ---
+Current board key: "4241008000000_2e10000000_1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 7 (Player: White) ---
+Current board key: "4243038000000_e00000000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 8 (Player: Black) ---
+Current board key: "4203038000000_8040e00000000_1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 9 (Player: White) ---
+Current board key: "6243838000000_8000600000000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 10 (Player: Black) ---
+Current board key: "2203838000000_40c040600000000_1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 11 (Player: White) ---
+Current board key: "2223c38000000_40c040200000000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 12 (Player: White) ---
+Current board key: "203c38000000_60e060200000000_-1_true"
+Key found in nodeMap? false
+
+--- W3 G8 - Turn 13 (Player: Black) ---
+Current board key: "203428000000_60e060a10200000_1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 14 (Player: White) ---
+Current board key: "203428202000_60e060a10000000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 15 (Player: Black) ---
+Current board key: "201428202000_60e462a10000000_1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 16 (Player: White) ---
+Current board key: "201438302000_60e462a00000000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 17 (Player: Black) ---
+Current board key: "1438302000_62e662a00000000_1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 18 (Player: White) ---
+Current board key: "81c38302000_62e662200000000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 19 (Player: Black) ---
+Current board key: "1c38302000_62e7e2200000000_1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 20 (Player: White) ---
+Current board key: "10181c38302000_62e662200000000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 21 (Player: Black) ---
+Current board key: "10100c18302000_62e6e3220400000_1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 22 (Player: White) ---
+Current board key: "70301c18302000_60e4e2220400000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 23 (Player: Black) ---
+Current board key: "70301818302000_60e4e2622400000_1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 24 (Player: White) ---
+Current board key: "70303878302000_60e4e0602400000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 25 (Player: Black) ---
+Current board key: "70301060002000_60e4e2e1a780000_1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 26 (Player: White) ---
+Current board key: "70301070303000_60e4e2e0a480000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 27 (Player: Black) ---
+Current board key: "70301030303000_60e4e6e4a480000_1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 28 (Player: White) ---
+Current board key: "7030183c383000_60e4e6642400000_-1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 29 (Player: White) ---
+Current board key: "7030102c183000_60e4e6e52604000_-1_true"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 30 (Player: White) ---
+Current board key: "70301028183000_60e4e6e56624000_-1_true"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 31 (Player: Black) ---
+Current board key: "70301028103000_60e4e6e566a4400_1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 32 (Player: White) ---
+Current board key: "703010281c3000_60e4e6e56624400_-1_false"
+Key found in nodeMap? true
+
+--- W3 G8 - Turn 33 (Player: Black) ---
+Current board key: "70301000000000_60e4e6e7e7e7c00_1_false"
+Key found in nodeMap? true

@@ -8,29 +8,29 @@ export class MergeMCTSTreeManager {
       this.nodeMap = new Map();
    }
 
-   async loadTree(filePath) {
+   async loadTree(filePath, fileName) {
       this.rootNode = null;
       this.nodeMap.clear();
       try {
          const data = await fs.readFile(filePath);
          if (data.length === 0) {
-            console.warn(`[Merge Tree] Loaded empty file: ${filePath}.`);
+            console.warn(`Loaded empty file: ${fileName}.`);
             return false;
          }
          const serializableRoot = decode(data);
          this.rootNode = MCTSNode.fromSerializableObject(serializableRoot);
          this._rebuildNodeMap(this.rootNode);
-         console.log(`[Merge Tree] Tree loaded <- ${filePath}. ${this.nodeMap.size} nodes`);
+         console.log(`Tree loaded <- ${fileName}. ${this.nodeMap.size} nodes`);
          return true;
       } catch (e) {
-         console.error(`[Merge Tree] Failed to load <- ${filePath}`);
+         console.error(`Failed to load <- ${fileName}`);
          return false;
       }
    }
 
-   async saveTree(filePath) {
+   async saveTree(filePath, fileName, isMainFile) {
       if (!this.rootNode) {
-         console.warn(`[Merge Tree] No tree -> ${filePath}.`);
+         console.warn(`No tree -> ${fileName}.`);
          return false;
       }
       try {
@@ -38,24 +38,24 @@ export class MergeMCTSTreeManager {
          const encoder = new Encoder({ maxDepth: 250 });
          const encoded = encoder.encode(serializableTree);
          await fs.writeFile(filePath, encoded);
-         console.log(`[Merge Tree] Tree saved -> ${filePath}. ${this.nodeMap.size} nodes`);
+         if (isMainFile) console.log(`Tree saved -> ${fileName}. ${this.nodeMap.size} nodes`);
          return true;
       } catch (e) {
-         console.error(`[Merge Tree] Failed to save -> ${filePath}:`, e.message);
+         console.error(`Failed to save -> ${fileName}:`, e.message);
          return false;
       }
    }
 
    mergeTrees(otherTreeManager) {
       if (!otherTreeManager || !otherTreeManager.rootNode) {
-         console.warn("[Merge Tree] No tree -> merge");
+         console.warn("No tree -> merge");
          return;
       }
 
       if (!this.rootNode) {
          this.rootNode = MCTSNode.fromSerializableObject(otherTreeManager.rootNode.toSerializableObject());
          this._rebuildNodeMap(this.rootNode);
-         console.log("[Merge Tree] Merged tree -> empty");
+         console.log("Merged tree -> empty");
          return;
       }
       this.rootNode.merge(otherTreeManager.rootNode);
