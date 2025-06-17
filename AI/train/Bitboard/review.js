@@ -58,7 +58,7 @@ async function playGames() {
             const randomMove = legalMoves[Math.floor(randomBotRng() * legalMoves.length)];
             moveBit = BigInt(randomMove[0] * 8 + randomMove[1]);
          }
-         board.display();
+         //board.display();
          board.applyMove(moveBit);
       }
       const winner = board.getWinner();

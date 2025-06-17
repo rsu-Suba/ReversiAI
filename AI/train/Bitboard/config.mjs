@@ -8,7 +8,7 @@ export const config = {
    vsRandom: false,
 
    //Review
-   reviewSimsN: 100,
+   reviewSimsN: 5000,
    reviewMatches: 4,
 
    //common

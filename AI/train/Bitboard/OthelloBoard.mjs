@@ -28,23 +28,76 @@ export class OthelloBoard {
    }
 
    getLegalMovesBitboard() {
-      const playerBoard = this.currentPlayer === 1 ? this.blackBoard : this.whiteBoard;
-      const enemyBoard = this.currentPlayer === 1 ? this.whiteBoard : this.blackBoard;
-      const emptySquares = ~(playerBoard | enemyBoard);
-      let legalMoves = 0n;
-      for (let i = 0; i < 64; i++) {
-         const moveBit = BigInt(i);
-         const moveMask = 1n << moveBit;
+      const player = this.currentPlayer === 1 ? this.blackBoard : this.whiteBoard;
+      const enemy = this.currentPlayer === 1 ? this.whiteBoard : this.blackBoard;
+      const empty = ~(player | enemy);
+      let moves = 0n;
 
-         if ((moveMask & emptySquares) === 0n) {
-            continue;
-         }
-         if (this._calculateFlips(moveBit, playerBoard, enemyBoard) !== 0n) {
-            legalMoves |= moveMask;
-         }
-      }
+      let candidates = (player << 1n) & OthelloBoard.rNMask & enemy;
+      candidates |= (candidates << 1n) & OthelloBoard.rNMask & enemy;
+      candidates |= (candidates << 1n) & OthelloBoard.rNMask & enemy;
+      candidates |= (candidates << 1n) & OthelloBoard.rNMask & enemy;
+      candidates |= (candidates << 1n) & OthelloBoard.rNMask & enemy;
+      candidates |= (candidates << 1n) & OthelloBoard.rNMask & enemy;
+      moves |= (candidates << 1n) & empty;
 
-      return legalMoves;
+      candidates = (player >> 1n) & OthelloBoard.lNMask & enemy;
+      candidates |= (candidates >> 1n) & OthelloBoard.lNMask & enemy;
+      candidates |= (candidates >> 1n) & OthelloBoard.lNMask & enemy;
+      candidates |= (candidates >> 1n) & OthelloBoard.lNMask & enemy;
+      candidates |= (candidates >> 1n) & OthelloBoard.lNMask & enemy;
+      candidates |= (candidates >> 1n) & OthelloBoard.lNMask & enemy;
+      moves |= (candidates >> 1n) & empty;
+
+      candidates = (player << 8n) & enemy;
+      candidates |= (candidates << 8n) & enemy;
+      candidates |= (candidates << 8n) & enemy;
+      candidates |= (candidates << 8n) & enemy;
+      candidates |= (candidates << 8n) & enemy;
+      candidates |= (candidates << 8n) & enemy;
+      moves |= (candidates << 8n) & empty;
+
+      candidates = (player >> 8n) & enemy;
+      candidates |= (candidates >> 8n) & enemy;
+      candidates |= (candidates >> 8n) & enemy;
+      candidates |= (candidates >> 8n) & enemy;
+      candidates |= (candidates >> 8n) & enemy;
+      candidates |= (candidates >> 8n) & enemy;
+      moves |= (candidates >> 8n) & empty;
+
+      candidates = (player << 9n) & OthelloBoard.rNMask & enemy;
+      candidates |= (candidates << 9n) & OthelloBoard.rNMask & enemy;
+      candidates |= (candidates << 9n) & OthelloBoard.rNMask & enemy;
+      candidates |= (candidates << 9n) & OthelloBoard.rNMask & enemy;
+      candidates |= (candidates << 9n) & OthelloBoard.rNMask & enemy;
+      candidates |= (candidates << 9n) & OthelloBoard.rNMask & enemy;
+      moves |= (candidates << 9n) & empty;
+
+      candidates = (player << 7n) & OthelloBoard.lNMask & enemy;
+      candidates |= (candidates << 7n) & OthelloBoard.lNMask & enemy;
+      candidates |= (candidates << 7n) & OthelloBoard.lNMask & enemy;
+      candidates |= (candidates << 7n) & OthelloBoard.lNMask & enemy;
+      candidates |= (candidates << 7n) & OthelloBoard.lNMask & enemy;
+      candidates |= (candidates << 7n) & OthelloBoard.lNMask & enemy;
+      moves |= (candidates << 7n) & empty;
+
+      candidates = (player >> 7n) & OthelloBoard.rNMask & enemy;
+      candidates |= (candidates >> 7n) & OthelloBoard.rNMask & enemy;
+      candidates |= (candidates >> 7n) & OthelloBoard.rNMask & enemy;
+      candidates |= (candidates >> 7n) & OthelloBoard.rNMask & enemy;
+      candidates |= (candidates >> 7n) & OthelloBoard.rNMask & enemy;
+      candidates |= (candidates >> 7n) & OthelloBoard.rNMask & enemy;
+      moves |= (candidates >> 7n) & empty;
+
+      candidates = (player >> 9n) & OthelloBoard.lNMask & enemy;
+      candidates |= (candidates >> 9n) & OthelloBoard.lNMask & enemy;
+      candidates |= (candidates >> 9n) & OthelloBoard.lNMask & enemy;
+      candidates |= (candidates >> 9n) & OthelloBoard.lNMask & enemy;
+      candidates |= (candidates >> 9n) & OthelloBoard.lNMask & enemy;
+      candidates |= (candidates >> 9n) & OthelloBoard.lNMask & enemy;
+      moves |= (candidates >> 9n) & empty;
+
+      return moves;
    }
 
    _calculateFlips(moveBit, playerBoard, enemyBoard) {
@@ -73,7 +126,6 @@ export class OthelloBoard {
          current = moveMask >> shift;
          while ((current & enemyBoard) !== 0n) {
             line |= current;
-            // 端のチェック
             if ((current & OthelloBoard.lMask) !== 0n && (shift === 1n || shift === 9n || shift === 7n)) {
                line = 0n;
                break;
@@ -118,12 +170,21 @@ export class OthelloBoard {
    }
 
    isGameOver() {
-      const p = this.currentPlayer;
-      if (this.getLegalMovesBitboard() !== 0n) return false;
+      const occupied = this.blackBoard | this.whiteBoard;
+      if (occupied === OthelloBoard.AllMask || this.blackBoard === 0n || this.whiteBoard === 0n) {
+         return true;
+      }
+      const currentPlayer = this.currentPlayer;
+      if (this.getLegalMovesBitboard() !== 0n) {
+         return false;
+      }
       this.currentPlayer *= -1;
-      const oppMoves = this.getLegalMovesBitboard();
-      this.currentPlayer = p;
-      return oppMoves === 0n;
+      const opponentMoves = this.getLegalMovesBitboard();
+      this.currentPlayer = currentPlayer;
+      if (opponentMoves !== 0n) {
+         return false;
+      }
+      return true;
    }
 
    getLegalMoves() {
