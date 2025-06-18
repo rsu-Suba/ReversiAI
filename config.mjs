@@ -1,14 +1,14 @@
 export const config = {
    //Train
-   parallel: 1,
+   parallel: 4,
    simsN: 10,
-   cP: 1.4,
+   cP: 2.0,
    trainingHours: 0,
-   matches: 1,
+   matches: 4,
    vsRandom: false,
 
    //Review
-   reviewSimsN: 1000,
+   reviewSimsN: 100,
    reviewMatches: 20,
 
    //Common

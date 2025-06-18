@@ -13,6 +13,10 @@ const simsN = config.simsN;
 const cP = config.cP;
 const totalGames = config.matches;
 const vsRandom = config.vsRandom;
+const MEMORY_CHECK_INTERVAL_MS = config.Mem_Check_Interval || 5000;
+const RESOURCE_LOG_INTERVAL_MS = 25000;
+const MEMORY_THRESHOLD_PERCENT = config.Mem_Threshold_Per || 0.85;
+const MAX_HEAP_SIZE_MB = config.Mem_Heap_Size || 2048;
 
 const saveFileName = config.treeSavePath;
 const backupFileName = config.treeBackupPath;
@@ -23,7 +27,16 @@ const backupFilePath = path.join(__dirname, backupFileName);
 
 let gamesFinishedCount = 0;
 const activeWorkers = new Map();
+const workerMemUsage = new Map();
 let isTerminating = false;
+
+let lastCPUUsage = process.cpuUsage();
+let lastCPUTime = process.hrtime.bigint();
+
+const MAX_HEAP_SIZE_BYTES = MAX_HEAP_SIZE_MB * 1024 * 1024;
+const MEMORY_THRESHOLD_BYTES = MAX_HEAP_SIZE_BYTES * MEMORY_THRESHOLD_PERCENT;
+let resCheckInterval;
+let memoryCheckInterval;
 
 const mainTreeManager = new MergeMCTSTreeManager();
 
@@ -31,6 +44,9 @@ async function startSelfPlay() {
    console.log("\n--- Starting Parallel Play ---");
    console.log(`Sim:${simsN}, Parallel:${numParallelGames}, Matches:${totalGames}`);
    await loadMCTSTree(mainTreeManager, saveFilePath, backupFilePath);
+   logResorceUsage();
+   resCheckInterval = setInterval(logResorceUsage, RESOURCE_LOG_INTERVAL_MS);
+   memoryCheckInterval = setInterval(checkMemoryUsage, MEMORY_CHECK_INTERVAL_MS);
    process.on("SIGINT", () => initiateTermination("Ctrl+C"));
    for (let i = 0; i < numParallelGames; i++) {
       startNewGameWorker(i);
@@ -44,10 +60,14 @@ function startNewGameWorker(slotId) {
          cP: cP,
          workerSlotId: slotId,
          vsRandom: vsRandom,
+         treeData: mainTreeManager.getRootNode()
+            ? JSON.stringify(mainTreeManager.getRootNode().toSerializableObject())
+            : null,
       },
    });
 
    activeWorkers.set(slotId, worker);
+   workerMemUsage.set(slotId, 0);
 
    worker.on("message", async (msg) => {
       if (isTerminating) return;
@@ -75,12 +95,20 @@ function startNewGameWorker(slotId) {
          if (gamesFinishedCount >= totalGames) {
             initiateTermination("learning_target_reached");
          } else {
-            worker.postMessage({ type: "start_game" });
+            worker.postMessage({
+               type: "start_game",
+               treeData: mainTreeManager.getRootNode()
+                  ? JSON.stringify(mainTreeManager.getRootNode().toSerializableObject())
+                  : null,
+            });
          }
+      } else if (msg.type === "worker_status_update") {
+         workerMemUsage.set(slotId, msg.heapUsedMB);
       } else if (msg.type === "game_error") {
          console.error(`--- Game Error (W${msg.workerSlotId}) ---`);
          console.error(`Error: ${msg.errorMessage}`);
          worker.terminate();
+         workerMemUsage.delete(slotId);
          activeWorkers.delete(slotId);
       }
    });
@@ -99,6 +127,7 @@ async function initiateTermination(reason = "unknown") {
    if (isTerminating) return;
    isTerminating = true;
    console.log(`\n--- Termination (${reason}) ---`);
+   clearInterval(resCheckInterval);
    activeWorkers.forEach((worker) => {
       worker.postMessage({ type: "terminate_now" });
    });
@@ -134,6 +163,44 @@ async function loadMCTSTree(treeManager, primaryPath, backupPath) {
       console.warn(`Backup tree not found or failed to load from ${backupPath}.`);
    }
    console.log("No saved tree found. Creating a new tree.");
+}
+
+function checkMemoryUsage() {
+   const heapUsed = process.memoryUsage().heapUsed;
+   if (heapUsed > MEMORY_THRESHOLD_BYTES) {
+      console.warn(`\n--- MAIN THREAD MEMORY LIMIT EXCEEDED --- (${Math.round(heapUsed / 1024 / 1024)}MB)`);
+      initiateTermination("high_memory_usage");
+   }
+}
+
+function logResorceUsage() {
+   const memoryUsage = process.memoryUsage();
+   const heapUsedMB = Math.round(memoryUsage.heapUsed / 1024 / 1024);
+   const rssMB = Math.round(memoryUsage.rss / 1024 / 1024);
+
+   const currentCPUUsage = process.cpuUsage(lastCPUUsage);
+   const currentCPUTime = process.hrtime.bigint();
+   const elapsedTimeMs = Number(currentCPUTime - lastCPUTime) / 1_000_000;
+   const totalCPUTimeMs = (currentCPUUsage.user + currentCPUUsage.system) / 1000;
+   const cpuPercent = Math.min(100, Math.round(((totalCPUTimeMs / elapsedTimeMs) * 100) / numParallelGames));
+
+   lastCPUUsage = process.cpuUsage();
+   lastCPUTime = process.hrtime.bigint();
+
+   let totalWorkerHeapUsedMB = 0;
+   workerMemUsage.forEach((memMB) => {
+      totalWorkerHeapUsedMB += memMB;
+   });
+   const avgWorkerHeapUsedMB = workerMemUsage.size > 0 ? Math.round(totalWorkerHeapUsedMB / workerMemUsage.size) : 0;
+
+   console.log(
+      `\n||| Res monitor: RSS: ${rssMB} MB, Main: ${heapUsedMB} MB, Worker(avg): ${avgWorkerHeapUsedMB} MB, CPU: ${cpuPercent}% |||`
+   );
+   console.log(
+      `||| Threads: ${activeWorkers.size}/${numParallelGames}, Total nodes: ${
+         mainTreeManager.getNodeMap().size
+      } (${formatCurrentDateTime()}) |||\n`
+   );
 }
 
 startSelfPlay();

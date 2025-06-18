@@ -1,15 +1,25 @@
 import { OthelloBoard } from "./OthelloBoard.mjs";
 import { MCTS } from "./MCTS.mjs";
+import { MCTSNode } from "./MCTSNode.mjs";
 import { parentPort, workerData } from "worker_threads";
 import seedrandom from "seedrandom";
 
 const { simsN, cP, workerSlotId, vsRandom } = workerData;
 
-async function runSelfPlayGame() {
+async function runSelfPlayGame(treeData) {
    console.log(`W${workerSlotId}: Playing now.`);
    const board = new OthelloBoard();
    const rng = seedrandom(`seed-${workerSlotId}-${Date.now()}`);
    const mcts = new MCTS(cP, rng);
+   if (treeData) {
+      try {
+         const rootObject = JSON.parse(treeData);
+         mcts.root = MCTSNode.fromSerializableObject(rootObject);
+         mcts._rebuildNodeMap(mcts.root);
+      } catch (e) {
+         console.error(`W${workerSlotId}: Failed to load treeData for game. Starting fresh.`, e);
+      }
+   }
 
    try {
       while (!board.isGameOver()) {
@@ -45,7 +55,7 @@ async function runSelfPlayGame() {
          blackStones: board.getScores().black,
          whiteStones: board.getScores().white,
          winner: board.getWinner(),
-         treeDataAI1: JSON.stringify(mcts.getSerializableTree()),
+         treeDataAI1: mcts.getSerializableTree() ? JSON.stringify(mcts.getSerializableTree()) : null,
          treeDataAI2: null,
       });
    } catch (error) {
@@ -56,7 +66,7 @@ async function runSelfPlayGame() {
 
 parentPort.on("message", (msg) => {
    if (msg.type === "start_game") {
-      runSelfPlayGame();
+      runSelfPlayGame(msg.treeData);
    } else if (msg.type === "terminate_now") {
       process.exit(0);
    }
