@@ -1,73 +1,58 @@
 import { OthelloBoard } from "./OthelloBoard.mjs";
 import { MCTS } from "./MCTS.mjs";
-import { MCTSNode } from "./MCTSNode.mjs";
+import { DatabaseManager } from "./DatabaseManager.mjs";
 import { parentPort, workerData } from "worker_threads";
 import seedrandom from "seedrandom";
 
-const { simsN, cP, workerSlotId, vsRandom } = workerData;
+const { simsN, cP, workerSlotId, gamesToPlay } = workerData;
+const DB_FILE_PATH = `./mcts/mcts_w${workerSlotId}.sqlite`;
 
-async function runSelfPlayGame(treeData) {
-   console.log(`W${workerSlotId}: Playing now.`);
-   const board = new OthelloBoard();
+async function main() {
+   const dbManager = new DatabaseManager(DB_FILE_PATH);
+   await dbManager.init();
    const rng = seedrandom(`seed-${workerSlotId}-${Date.now()}`);
-   const mcts = new MCTS(cP, rng);
-   if (treeData) {
-      try {
-         const rootObject = JSON.parse(treeData);
-         mcts.root = MCTSNode.fromSerializableObject(rootObject);
-         mcts._rebuildNodeMap(mcts.root);
-      } catch (e) {
-         console.error(`W${workerSlotId}: Failed to load treeData for game. Starting fresh.`, e);
-      }
-   }
-
-   try {
+   const mcts = new MCTS(dbManager, cP, rng);
+   for (let i = 0; i < gamesToPlay; i++) {
+      parentPort.postMessage({
+         type: "game_starting",
+         workerSlotId: workerSlotId,
+         gameNumberInWorker: i + 1,
+         totalGamesInWorker: gamesToPlay,
+      });
+      const board = new OthelloBoard();
       while (!board.isGameOver()) {
          const legalMoves = board.getLegalMoves();
          if (legalMoves.length === 0) {
             board.applyMove(null);
             continue;
          }
-
-         let bestMoveBit;
-         if (vsRandom && board.currentPlayer === -1) {
-            const randomMove = legalMoves[Math.floor(rng() * legalMoves.length)];
-            bestMoveBit = BigInt(randomMove[0] * 8 + randomMove[1]);
+         const legalMoveBits = legalMoves.map((m) => BigInt(m[0] * 8 + m[1]));
+         const aiMoveBit = await mcts.run(board.blackBoard, board.whiteBoard, board.currentPlayer, simsN);
+         let finalMoveBit;
+         if (aiMoveBit !== null && legalMoveBits.includes(aiMoveBit)) {
+            finalMoveBit = aiMoveBit;
          } else {
-            bestMoveBit = mcts.run(
-               board.blackBoard,
-               board.whiteBoard,
-               board.currentPlayer,
-               board.passedLastTurn,
-               simsN
-            );
-            if (bestMoveBit === null) {
-               const randomMove = legalMoves[Math.floor(rng() * legalMoves.length)];
-               bestMoveBit = BigInt(randomMove[0] * 8 + randomMove[1]);
-            }
+            finalMoveBit = legalMoveBits[Math.floor(rng() * legalMoveBits.length)];
          }
-         board.applyMove(bestMoveBit);
+         board.applyMove(finalMoveBit);
       }
-      board.display();
       parentPort.postMessage({
          type: "game_finished",
          workerSlotId: workerSlotId,
-         blackStones: board.getScores().black,
-         whiteStones: board.getScores().white,
+         scores: board.getScores(),
          winner: board.getWinner(),
-         treeDataAI1: mcts.getSerializableTree() ? JSON.stringify(mcts.getSerializableTree()) : null,
-         treeDataAI2: null,
+         finalBlackBoard: board.blackBoard,
+         finalWhiteBoard: board.whiteBoard,
       });
-   } catch (error) {
-      console.error(`W${workerSlotId}: Error in game loop:`, error);
-      parentPort.postMessage({ type: "game_error", workerSlotId, errorMessage: error.message });
    }
+   await dbManager.close();
 }
 
-parentPort.on("message", (msg) => {
-   if (msg.type === "start_game") {
-      runSelfPlayGame(msg.treeData);
-   } else if (msg.type === "terminate_now") {
+main()
+   .then(() => {
       process.exit(0);
-   }
-});
+   })
+   .catch((err) => {
+      console.error(`Worker ${workerSlotId} crashed:`, err);
+      process.exit(1);
+   });

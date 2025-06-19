@@ -31,17 +31,13 @@ export class OthelloBoard {
       const playerBoard = this.currentPlayer === 1 ? this.blackBoard : this.whiteBoard;
       const enemyBoard = this.currentPlayer === 1 ? this.whiteBoard : this.blackBoard;
       const emptySquares = ~(playerBoard | enemyBoard);
-
       let legalMoves = 0n;
-
       for (let i = 0; i < 64; i++) {
          const moveBit = BigInt(i);
-         const moveMask = 1n << moveBit;
-
-         if ((moveMask & emptySquares) === 0n) continue;
-
-         if (this._calculateFlips(moveBit, playerBoard, enemyBoard) !== 0n) {
-            legalMoves |= moveMask;
+         if (((1n << moveBit) & emptySquares) !== 0n) {
+            if (this._calculateFlips(moveBit, playerBoard, enemyBoard) !== 0n) {
+               legalMoves |= 1n << moveBit;
+            }
          }
       }
       return legalMoves;
@@ -50,40 +46,29 @@ export class OthelloBoard {
    _calculateFlips(moveBit, playerBoard, enemyBoard) {
       const moveMask = 1n << moveBit;
       let totalFlipMask = 0n;
-      const directions = [1n, 7n, 8n, 9n];
-
+      const directions = [-9n, -8n, -7n, -1n, 1n, 7n, 8n, 9n];
       for (const shift of directions) {
          let line = 0n;
-         let current = moveMask << shift;
-         while ((current & enemyBoard) !== 0n) {
-            line |= current;
-            if ((current & OthelloBoard.rMask) !== 0n && (shift === 1n || shift === 9n || shift === 7n)) {
+         let current = moveMask;
+         for (let i = 0; i < OthelloBoard.boardLength; i++) {
+            if ((shift === 1n || shift === -7n || shift === 9n) && (current & OthelloBoard.rMask) !== 0n) {
                line = 0n;
                break;
             }
-            if ((current & OthelloBoard.lMask) !== 0n && (shift === 1n || shift === 9n || shift === 7n)) {
+            if ((shift === -1n || shift === 7n || shift === -9n) && (current & OthelloBoard.lMask) !== 0n) {
                line = 0n;
                break;
             }
-            current <<= shift;
+            current = shift > 0 ? current << shift : current >> -shift;
+            if ((current & enemyBoard) !== 0n) {
+               line |= current;
+            } else if ((current & playerBoard) !== 0n) {
+               totalFlipMask |= line;
+               break;
+            } else {
+               break;
+            }
          }
-         if ((current & playerBoard) !== 0n) totalFlipMask |= line;
-
-         line = 0n;
-         current = moveMask >> shift;
-         while ((current & enemyBoard) !== 0n) {
-            line |= current;
-            if ((current & OthelloBoard.lMask) !== 0n && (shift === 1n || shift === 9n || shift === 7n)) {
-               line = 0n;
-               break;
-            }
-            if ((current & OthelloBoard.rMask) !== 0n && (shift === 1n || shift === 9n || shift === 7n)) {
-               line = 0n;
-               break;
-            }
-            current >>= shift;
-         }
-         if ((current & playerBoard) !== 0n) totalFlipMask |= line;
       }
       return totalFlipMask;
    }
@@ -97,52 +82,35 @@ export class OthelloBoard {
       const playerBoard = this.currentPlayer === 1 ? this.blackBoard : this.whiteBoard;
       const enemyBoard = this.currentPlayer === 1 ? this.whiteBoard : this.blackBoard;
       const flipMask = this._calculateFlips(moveBit, playerBoard, enemyBoard);
-
-      if (flipMask === 0n) {
-         return false;
-      }
-
       const moveMask = 1n << moveBit;
       if (this.currentPlayer === 1) {
-         this.blackBoard |= moveMask | flipMask;
-         this.whiteBoard &= ~flipMask;
+         this.blackBoard ^= moveMask | flipMask;
+         this.whiteBoard ^= flipMask;
       } else {
-         this.whiteBoard |= moveMask | flipMask;
-         this.blackBoard &= ~flipMask;
+         this.whiteBoard ^= moveMask | flipMask;
+         this.blackBoard ^= flipMask;
       }
-
       this.passedLastTurn = false;
       this.currentPlayer *= -1;
-      return true;
    }
 
    isGameOver() {
-      if (
-         (this.blackBoard | this.whiteBoard) === OthelloBoard.AllMask ||
-         this.blackBoard === 0n ||
-         this.whiteBoard === 0n
-      ) {
-         return true;
-      }
+      if ((this.blackBoard | this.whiteBoard) === OthelloBoard.AllMask) return true;
+      if (this.blackBoard === 0n || this.whiteBoard === 0n) return true;
       const originalPlayer = this.currentPlayer;
-      if (this.getLegalMovesBitboard() !== 0n) {
-         return false;
-      }
+      if (this.getLegalMovesBitboard() !== 0n) return false;
       this.currentPlayer *= -1;
       const opponentMoves = this.getLegalMovesBitboard();
       this.currentPlayer = originalPlayer;
-
       return opponentMoves === 0n;
    }
 
    getLegalMoves() {
-      const LegalMovesBitboard = this.getLegalMovesBitboard();
+      const bitboard = this.getLegalMovesBitboard();
       const moves = [];
-      for (let i = 0n; i < BigInt(OthelloBoard.boardSize); i++) {
-         if (((LegalMovesBitboard >> i) & 1n) !== 0n) {
-            const r = Math.floor(Number(i) / OthelloBoard.boardLength);
-            const c = Number(i) % OthelloBoard.boardLength;
-            moves.push([r, c]);
+      for (let i = 0; i < 64; i++) {
+         if ((bitboard >> BigInt(i)) & 1n) {
+            moves.push([Math.floor(i / 8), i % 8]);
          }
       }
       return moves;

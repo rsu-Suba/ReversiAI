@@ -1,85 +1,117 @@
 import { OthelloBoard } from "./OthelloBoard.mjs";
 import { MCTS } from "./MCTS.mjs";
+import { DatabaseManager } from "./DatabaseManager.mjs";
 import { config } from "./config.mjs";
-import { fileURLToPath } from "url";
-import * as path from "path";
+import * as readline from "readline";
 import seedrandom from "seedrandom";
+import * as fs from "fs";
 
-const NUM_GAMES_TO_PLAY = config.reviewMatches;
-const MCTS_SIMS_PER_MOVE = config.reviewSimsN;
-const TREE_FILE_PATH = config.treeLoadPath;
+const humanPlaysArg = process.argv[2];
+const HUMAN_PLAYS = humanPlaysArg === "1";
+const DB_FILE_PATH = config.treeLoadPath;
+const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+const questionAsync = (query) => new Promise((resolve) => rl.question(query, resolve));
 
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const saveFilePath = path.join(__dirname, TREE_FILE_PATH);
-
-async function playGames() {
-   console.log("--- MCTS AI vs Random Bot ---");
-   console.log(`Loading learned tree <- ${TREE_FILE_PATH}`);
-   const mctsAI = new MCTS(config.cP, seedrandom(`mcts-ai-seed`));
-   const loaded = await mctsAI.loadTree(saveFilePath);
-   if (!loaded) {
-      console.error("FATAL: MCTS tree could not be loaded. Run training script first.");
-      return;
-   }
-   console.log(`Tree loaded -> ${mctsAI.nodeMap.size} nodes.`);
-
+async function runEvaluation() {
+   cleanupTempFiles(DB_FILE_PATH);
+   console.log(`--- MCTS AI vs ${HUMAN_PLAYS ? "Human" : "Random Bot"} ---`);
+   const numGamesToPlay = HUMAN_PLAYS ? 1 : config.reviewMatches;
+   console.log(`${numGamesToPlay} game`);
+   const dbManager = new DatabaseManager(DB_FILE_PATH);
+   await dbManager.init();
+   const mctsAI = new MCTS(dbManager, config.cP, seedrandom("mcts-ai-seed"));
+   const totalNodes = await dbManager.getNodeCount();
+   console.log(`Database connected -> ${totalNodes} nodes`);
    let mctsWins = 0;
-   let randomBotWins = 0;
    let draws = 0;
-   for (let i = 1; i <= NUM_GAMES_TO_PLAY; i++) {
+
+   for (let i = 1; i <= numGamesToPlay; i++) {
       const board = new OthelloBoard();
-      const randomBotRng = seedrandom(`random-bot-seed-${i}`);
       const isMctsBlack = Math.random() < 0.5;
-      console.log(`\n--- Game ${i}/${NUM_GAMES_TO_PLAY} | MCTS -> ${isMctsBlack ? "Black" : "White"} ---`);
+      console.log(`\n--- Game ${i}/${numGamesToPlay} | MCTS -> ${isMctsBlack ? "Black" : "White"} ---`);
+      if (HUMAN_PLAYS) board.display();
+
       while (!board.isGameOver()) {
          const legalMoves = board.getLegalMoves();
-         //board.display();
          if (legalMoves.length === 0) {
+            if (HUMAN_PLAYS) console.log(`No legal moves ${board.currentPlayer === 1 ? "Black" : "White"}. Auto pass.`);
             board.applyMove(null);
             continue;
          }
-
          let moveBit;
          const isMctsTurn = (board.currentPlayer === 1 && isMctsBlack) || (board.currentPlayer === -1 && !isMctsBlack);
          if (isMctsTurn) {
-            moveBit = mctsAI.run(
-               board.blackBoard,
-               board.whiteBoard,
-               board.currentPlayer,
-               board.passedLastTurn,
-               MCTS_SIMS_PER_MOVE
-            );
-            if (moveBit === null) {
-               console.warn("MCTS returned null, picking random move.");
-               const randomMove = legalMoves[Math.floor(randomBotRng() * legalMoves.length)];
-               moveBit = BigInt(randomMove[0] * 8 + randomMove[1]);
+            if (HUMAN_PLAYS) console.log("AI 🤔🤔🤔...");
+            moveBit = await mctsAI.run(board.blackBoard, board.whiteBoard, board.currentPlayer, config.reviewSimsN, false);
+            if (HUMAN_PLAYS) {
+               if (moveBit !== null) {
+                  const moveIndex = Number(moveBit);
+                  const moveX = moveIndex % 8;
+                  const moveY = Math.floor(moveIndex / 8);
+                  const algebraicMove = "abcdefgh"[moveX] + moveY;
+                  console.log(`AI 😓👍: ${algebraicMove}`);
+               } else {
+                  console.log("AI 😓👍: Pass");
+               }
             }
          } else {
-            const randomMove = legalMoves[Math.floor(randomBotRng() * legalMoves.length)];
-            moveBit = BigInt(randomMove[0] * 8 + randomMove[1]);
+            if (HUMAN_PLAYS) {
+               console.log("Your turn🫵. Placeable\n", legalMoves.map((m) => `${"abcdefgh"[m[1]]}${m[0]}`).join(", "));
+               while (true) {
+                  const userInput = (await questionAsync("Select move: ")).toLowerCase();
+                  const chosenMove = legalMoves.find((m) => `${"abcdefgh"[m[1]]}${m[0]}` === userInput);
+                  if (chosenMove) {
+                     moveBit = BigInt(chosenMove[0] * 8 + chosenMove[1]);
+                     break;
+                  }
+                  console.log("❌Invalid move.");
+               }
+            } else {
+               const randomMove = legalMoves[Math.floor(Math.random() * legalMoves.length)];
+               moveBit = BigInt(randomMove[0] * 8 + randomMove[1]);
+            }
          }
          board.applyMove(moveBit);
+         if (HUMAN_PLAYS) board.display();
       }
+      console.log(`\n--- Game ${i} Finished ---`);
       board.display();
       const winner = board.getWinner();
-      if (winner === 0) {
-         draws++;
-         console.log("Result: Draw");
-      } else if ((winner === 1 && isMctsBlack) || (winner === -1 && !isMctsBlack)) {
+      const scores = board.getScores();
+      console.log(`Scores: ${scores.black} / ${scores.white}`);
+      let resultMessage = "Result: Draw";
+      if (winner === 0) draws++;
+      if ((winner === 1 && isMctsBlack) || (winner === -1 && !isMctsBlack)) {
          mctsWins++;
-         console.log("Result: MCTS AI Wins!");
+         resultMessage = "Result: MCTS AI Wins!";
       } else {
-         randomBotWins++;
-         console.log("Result: Random Bot Wins.");
+         resultMessage = `Result: ${HUMAN_PLAYS ? "You Win!" : "Random Bot Wins."}`;
       }
-      console.log(`Scores: ${board.getScores().black} / ${board.getScores().white}`);
+      console.log(resultMessage);
    }
 
-   console.log("\n--- Final Results ---");
-   console.log(`Total Games: ${NUM_GAMES_TO_PLAY}`);
-   console.log(`MCTS AI Wins: ${mctsWins} (${((mctsWins / NUM_GAMES_TO_PLAY) * 100).toFixed(2)}%)`);
-   console.log(`Random Bot Wins: ${randomBotWins}`);
-   console.log(`Draws: ${draws}`);
+   if (!HUMAN_PLAYS) {
+      console.log("\n\n--- Final Tally ---");
+      console.log(`Total Games Played: ${numGamesToPlay}`);
+      console.log(`MCTS AI Wins: ${mctsWins}`);
+      console.log(`Draws: ${draws}`);
+      console.log(`AI Win Rate: ${((mctsWins / numGamesToPlay) * 100).toFixed(2)}%`);
+   }
+   await dbManager.close();
+   rl.close();
 }
-playGames();
+
+function cleanupTempFiles(dbPath) {
+   const tempFiles = [`${dbPath}-shm`, `${dbPath}-wal`];
+   tempFiles.forEach((file) => {
+      if (fs.existsSync(file)) {
+         try {
+            fs.unlinkSync(file);
+         } catch (err) {
+            console.error(`Failed to remove -> ${file}:`, err);
+         }
+      }
+   });
+}
+
+runEvaluation();

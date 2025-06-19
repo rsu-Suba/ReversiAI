@@ -1,130 +1,79 @@
 import { MCTSNode } from "./MCTSNode.mjs";
 import { OthelloBoard } from "./OthelloBoard.mjs";
-import { decode, Encoder } from "@msgpack/msgpack";
-import * as fs from "fs/promises";
 
 export class MCTS {
-   constructor(cP, rng) {
+   constructor(dbManager, cP, rng) {
+      this.dbManager = dbManager;
       this.cP = cP;
       this.rng = rng || Math.random;
       this.nodeMap = new Map();
       this.simGameBoard = new OthelloBoard();
-      this.root = new MCTSNode(OthelloBoard.blackInitBoard, OthelloBoard.whiteInitBoard, 1, null, null, 0, false);
-      this.nodeMap.set(this.root.getBoardStateKey(), this.root);
    }
 
-   async saveTree(filePath) {
-      try {
-         const serializableRoot = this.root.toSerializableObject();
-         const encoder = new Encoder({ maxDepth: 500 });
-         const encoded = encoder.encode(serializableRoot);
-         await fs.writeFile(filePath, encoded);
-         return true;
-      } catch (error) {
-         console.error(`Error saving MCTS tree to ${filePath}:`, error);
-         return false;
-      }
-   }
-
-   async loadTree(filePath) {
-      try {
-         const buffer = await fs.readFile(filePath);
-         const serializableRoot = decode(buffer);
-         this.root = MCTSNode.fromSerializableObject(serializableRoot);
-         this._rebuildNodeMap(this.root);
-         return true;
-      } catch (error) {
-         console.error(`Failed to load tree from ${filePath}:`, error);
-         return false;
-      }
-   }
-
-   _rebuildNodeMap(rootNode) {
-      this.nodeMap.clear();
-      if (!rootNode) return;
-      const queue = [rootNode];
-      while (queue.length > 0) {
-         const node = queue.shift();
-         const key = node.getBoardStateKey();
-         if (!this.nodeMap.has(key)) {
-            this.nodeMap.set(key, node);
-            for (const move in node.children) {
-               queue.push(node.children[move]);
-            }
-         }
-      }
-   }
-
-   getSerializableTree() {
-      if (this.root) {
-         return this.root.toSerializableObject();
-      }
-      return null;
-   }
-
-   run(blackBoard, whiteBoard, currentPlayer, passedLastTurn, numSimulations) {
-      const timeLimit = 30000;
-      const startTime = Date.now();
-      const boardKey = `${blackBoard.toString(16)}_${whiteBoard.toString(16)}_${currentPlayer}_${passedLastTurn}`;
-      let rootNode = this.nodeMap.get(boardKey);
+   async run(blackBoard, whiteBoard, currentPlayer, numSimulations, isTraining = true) {
+      const boardKey = `${blackBoard.toString(16)}_${whiteBoard.toString(16)}_${currentPlayer}`;
+      let rootNode = await this.getNode(boardKey);
 
       if (!rootNode) {
-         rootNode = new MCTSNode(blackBoard, whiteBoard, currentPlayer, null, null, 0, passedLastTurn);
+         rootNode = new MCTSNode(blackBoard, whiteBoard, currentPlayer);
          this.nodeMap.set(boardKey, rootNode);
+         if (isTraining) await this.dbManager.saveNode(rootNode);
       }
 
       for (let i = 0; i < numSimulations; i++) {
-         if (Date.now() - startTime > timeLimit) {
-            console.warn(`MCTS >${timeLimit}ms. Finishing move.`);
-            break;
-         }
-         let node = this.select(rootNode);
-         let expandedNode = this.expand(node);
+         let node = await this.select(rootNode);
+         let expandedNode = await this.expand(node, isTraining);
          let result = this.simulate(expandedNode);
-         this.backpropagate(expandedNode, result.winner);
+         if (isTraining) {
+            await this.backpropagate(expandedNode, result.winner);
+         }
       }
-      if (Object.keys(rootNode.children).length === 0) return null;
-      let bestMove = null,
-         maxVisits = -1;
-      for (const move in rootNode.children) {
-         const child = rootNode.children[move];
+
+      const childrenNodes = await this.getChildrenNodes(rootNode);
+      if (childrenNodes.length === 0) return null;
+
+      let bestMove = null;
+      let maxVisits = -1;
+      for (const child of childrenNodes) {
          if (child.visits > maxVisits) {
             maxVisits = child.visits;
-            bestMove = BigInt(move);
+            bestMove = child.move;
          }
       }
       return bestMove;
    }
 
-   select(rootNode) {
-      let node = rootNode;
-      let path = [node.getBoardStateKey()];
+   async select(node) {
+      let currentNode = node;
+      while (currentNode) {
+         this.simGameBoard.setBoardState(currentNode.blackBoard, currentNode.whiteBoard, currentNode.currentPlayer);
+         if (this.simGameBoard.isGameOver()) break;
 
-      while (true) {
-         this.simGameBoard.setBoardState(node.blackBoard, node.whiteBoard, node.currentPlayer, 0, node.passedLastTurn);
-         const bestChildMove = node.bestChild(this.cP, this.rng);
-         if (this.simGameBoard.isGameOver() || !node.isFullyExpanded(this.simGameBoard) || bestChildMove === null) {
-            break;
-         }
-         node = node.children[bestChildMove.toString()];
-         path.push(node.getBoardStateKey());
+         const legalMoves = this.simGameBoard.getLegalMoves();
+         const childrenNodes = await this.getChildrenNodes(currentNode);
 
-         if (path.length > 100) {
-            break;
-         }
+         if (childrenNodes.length < legalMoves.length) break;
+         if (legalMoves.length === 0) break;
+
+         const bestChildKey = currentNode.bestChild(this.cP, childrenNodes);
+         if (bestChildKey === null) break;
+
+         currentNode = await this.getNode(bestChildKey);
       }
-
-      return node;
+      return currentNode || node;
    }
 
-   expand(node) {
-      this.simGameBoard.setBoardState(node.blackBoard, node.whiteBoard, node.currentPlayer, node.passedLastTurn);
+   async expand(node, isTraining = true) {
+      this.simGameBoard.setBoardState(node.blackBoard, node.whiteBoard, node.currentPlayer);
       const legalMoves = this.simGameBoard.getLegalMoves();
-      if (legalMoves.length === 0 || this.simGameBoard.isGameOver()) return node;
+      if (this.simGameBoard.isGameOver() || legalMoves.length === 0) return node;
+
+      const childrenNodes = await this.getChildrenNodes(node);
+      const expandedMoveStrings = childrenNodes.map((c) => c.move.toString());
 
       const unexpandedMoves = legalMoves.filter((move) => {
          const moveBit = BigInt(move[0] * 8 + move[1]);
-         return !node.children[moveBit.toString()];
+         return !expandedMoveStrings.includes(moveBit.toString());
       });
 
       if (unexpandedMoves.length === 0) return node;
@@ -133,30 +82,50 @@ export class MCTS {
       const moveBit = BigInt(moveCoords[0] * 8 + moveCoords[1]);
 
       const nextBoard = new OthelloBoard();
-      nextBoard.setBoardState(node.blackBoard, node.whiteBoard, node.currentPlayer, node.passedLastTurn);
+      nextBoard.setBoardState(node.blackBoard, node.whiteBoard, node.currentPlayer);
       nextBoard.applyMove(moveBit);
 
       const newNode = new MCTSNode(
          nextBoard.blackBoard,
          nextBoard.whiteBoard,
          nextBoard.currentPlayer,
-         node,
-         moveBit,
-         node.depth + 1,
-         nextBoard.passedLastTurn
+         node.getBoardStateKey(),
+         moveBit
       );
-      node.children[moveBit.toString()] = newNode;
+
+      node.addChildKey(newNode.getBoardStateKey());
       this.nodeMap.set(newNode.getBoardStateKey(), newNode);
+
+      if (isTraining) {
+         await this.dbManager.saveNode(node);
+         await this.dbManager.saveNode(newNode);
+      }
       return newNode;
+   }
+
+   async backpropagate(node, winner) {
+      const updates = [];
+      let tempNode = node;
+      while (tempNode) {
+         tempNode.visits++;
+         //if (tempNode.currentPlayer !== winner) tempNode.wins++;
+         if (winner === 0) tempNode.wins++;
+         updates.push({
+            key: tempNode.getBoardStateKey(),
+            wins: tempNode.wins,
+            visits: tempNode.visits,
+         });
+         if (!tempNode.parent_key) break;
+         tempNode = await this.getNode(tempNode.parent_key);
+      }
+      if (updates.length > 0) await this.dbManager.batchUpdateNodes(updates);
    }
 
    simulate(node) {
       const simBoard = new OthelloBoard();
-      simBoard.setBoardState(node.blackBoard, node.whiteBoard, node.currentPlayer, node.passedLastTurn);
-      for (let turn = 0; turn < 64; turn++) {
-         if (simBoard.isGameOver()) {
-            break;
-         }
+      simBoard.setBoardState(node.blackBoard, node.whiteBoard, node.currentPlayer);
+      for (let turn = 0; turn < 100; turn++) {
+         if (simBoard.isGameOver()) break;
          const moves = simBoard.getLegalMoves();
          if (moves.length === 0) {
             simBoard.applyMove(null);
@@ -166,18 +135,35 @@ export class MCTS {
          const moveBit = BigInt(randomMove[0] * 8 + randomMove[1]);
          simBoard.applyMove(moveBit);
       }
-
       return { winner: simBoard.getWinner(), scores: simBoard.getScores() };
    }
 
-   backpropagate(node, winner) {
-      let tempNode = node;
-      while (tempNode) {
-         tempNode.visits++;
-         if (tempNode.currentPlayer !== winner) {
-            tempNode.wins++;
-         }
-         tempNode = tempNode.parent;
+   async getNode(key) {
+      if (this.nodeMap.has(key)) return this.nodeMap.get(key);
+      const nodeData = await this.dbManager.getNode(key);
+      if (!nodeData) return null;
+
+      const node = new MCTSNode(
+         nodeData.blackBoard,
+         nodeData.whiteBoard,
+         nodeData.currentPlayer,
+         nodeData.parent_key,
+         nodeData.move
+      );
+      node.wins = nodeData.wins;
+      node.visits = nodeData.visits;
+      node.children_keys = nodeData.children_keys;
+
+      this.nodeMap.set(key, node);
+      return node;
+   }
+
+   async getChildrenNodes(node) {
+      const children = [];
+      for (const childKey of node.children_keys) {
+         const childNode = await this.getNode(childKey);
+         if (childNode) children.push(childNode);
       }
+      return children;
    }
 }
