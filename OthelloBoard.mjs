@@ -27,6 +27,14 @@ export class OthelloBoard {
       this.passedLastTurn = Boolean(passedLastTurn || false);
    }
 
+   getBoardState() {
+      return {
+         blackBoard: this.blackBoard,
+         whiteBoard: this.whiteBoard,
+         currentPlayer: this.currentPlayer,
+      };
+   }
+
    getLegalMovesBitboard() {
       const playerBoard = this.currentPlayer === 1 ? this.blackBoard : this.whiteBoard;
       const enemyBoard = this.currentPlayer === 1 ? this.whiteBoard : this.blackBoard;

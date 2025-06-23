@@ -1,28 +1,139 @@
-import sqlite3 from "sqlite3";
-import { open } from "sqlite";
+import Database from "better-sqlite3";
 
 export class DatabaseManager {
    constructor(dbFilePath) {
-      this.dbFilePath = dbFilePath;
-      this.db = null;
-   }
-   async init() {
-      this.db = await open({ filename: this.dbFilePath, driver: sqlite3.Database });
-      await this.db.run("PRAGMA journal_mode = WAL;");
-      await this.db.run("PRAGMA busy_timeout = 5000;");
-      await this.db.exec(`
+      this.db = new Database(dbFilePath);
+      this.db.pragma("journal_mode = WAL");
+      this.db.pragma("busy_timeout = 5000");
+      this.db.exec(`
             CREATE TABLE IF NOT EXISTS mcts_nodes (
-                key TEXT PRIMARY KEY, parent_key TEXT, move TEXT,
-                wins REAL NOT NULL, visits INTEGER NOT NULL, children_keys TEXT NOT NULL,
-                black_board TEXT NOT NULL, white_board TEXT NOT NULL, current_player INTEGER NOT NULL
+                key TEXT PRIMARY KEY,
+                parent_key TEXT,
+                move TEXT,
+                wins REAL NOT NULL,
+                visits INTEGER NOT NULL,
+                children_keys TEXT NOT NULL,
+                black_board TEXT NOT NULL,
+                white_board TEXT NOT NULL,
+                current_player INTEGER NOT NULL
             )`);
+      this.upsertNodeStmt = this.db.prepare(
+         `INSERT INTO mcts_nodes (key, parent_key, move, wins, visits, children_keys, black_board, white_board, current_player)
+             VALUES (@key, @parent_key, @move, @wins, @visits, @children_keys, @black_board, @white_board, @current_player)
+             ON CONFLICT(key) DO UPDATE SET
+                 wins = excluded.wins,
+                 visits = excluded.visits,
+                 children_keys = excluded.children_keys`
+      );
+      this.getNodeStmt = this.db.prepare("SELECT * FROM mcts_nodes WHERE key = ?");
+      this.countStmt = this.db.prepare("SELECT COUNT(*) as count FROM mcts_nodes");
    }
-   async close() {
-      if (this.db) await this.db.close();
+
+   close() {
+      if (this.db) {
+         this.db.close();
+      }
    }
-   async getNode(key) {
-      const row = await this.db.get("SELECT * FROM mcts_nodes WHERE key = ?", key);
-      if (!row) return null;
+
+   batchSaveNodes(nodes) {
+      if (nodes.length === 0) return;
+      const transaction = this.db.transaction((nodesToSave) => {
+         for (const node of nodesToSave) {
+            this.upsertNodeStmt.run({
+               key: node.getBoardStateKey(),
+               parent_key: node.parent ? node.parent.getBoardStateKey() : null,
+               move: node.move ? node.move.toString() : null,
+               wins: node.wins,
+               visits: node.visits,
+               children_keys: JSON.stringify(Object.values(node.children).map((child) => child.getBoardStateKey())),
+               black_board: node.blackBoard.toString(16),
+               white_board: node.whiteBoard.toString(16),
+               current_player: node.currentPlayer,
+            });
+         }
+      });
+      transaction(nodes);
+   }
+
+   batchSaveNodesMerge(nodesToSave) {
+      // 保存するノードがなければ、何もしない
+      if (!nodesToSave || nodesToSave.length === 0) return;
+
+      // better-sqlite3の、非常に高速なトランザクション機能を利用
+      const transaction = this.db.transaction((nodes) => {
+         for (const nodeData of nodes) {
+            // MCTSNodeオブジェクトではなく、プレーンなデータオブジェクトを直接扱う
+            this.upsertNodeStmt.run({
+               key: nodeData.key,
+               parent_key: nodeData.parent_key,
+               move: nodeData.move,
+               wins: nodeData.wins,
+               visits: nodeData.visits,
+               children_keys: nodeData.children_keys,
+               black_board: nodeData.black_board,
+               white_board: nodeData.white_board,
+               current_player: nodeData.current_player,
+            });
+         }
+      });
+
+      // 作成したトランザクションを実行
+      transaction(nodesToSave);
+   }
+
+   // DatabaseManager.mjs に追加するメソッド
+
+   // データベースから読み取った形式の、プレーンなデータオブジェクトの配列を直接保存する
+   batchSaveNodesFromData(nodesData) {
+      if (nodesData.length === 0) return;
+
+      const transaction = this.db.transaction((nodes) => {
+         for (const nodeData of nodes) {
+            this.upsertNodeStmt.run({
+               key: nodeData.key,
+               parent_key: nodeData.parent_key,
+               move: nodeData.move,
+               wins: nodeData.wins,
+               visits: nodeData.visits,
+               children_keys: nodeData.children_keys,
+               black_board: nodeData.black_board,
+               white_board: nodeData.white_board,
+               current_player: nodeData.current_player,
+            });
+         }
+      });
+      transaction(nodesData);
+   }
+
+   getAllNodes() {
+      if (!this.db) {
+         console.error("Database not initialized.");
+         return [];
+      }
+      return this.db.prepare("SELECT * FROM mcts_nodes").all();
+   }
+
+   getNodeCount() {
+      if (!this.db) {
+         console.warn("[DB] getNodeCount called before DB initialization.");
+         return 0;
+      }
+      try {
+         const result = this.db.prepare("SELECT COUNT(*) as count FROM mcts_nodes").get();
+         return result.count;
+      } catch (error) {
+         console.error("[DB] Failed to get node count:", error);
+         return 0;
+      }
+   }
+
+   getNode(key) {
+      const row = this.getNodeStmt.get(key);
+      if (!row) {
+         //console.log(`No row ${key}`);
+         return null;
+      }
+      //console.log(`${key} found`);
       return {
          key: row.key,
          parent_key: row.parent_key,
@@ -34,59 +145,5 @@ export class DatabaseManager {
          whiteBoard: BigInt("0x" + row.white_board),
          currentPlayer: row.current_player,
       };
-   }
-   async saveNode(node) {
-      const key = node.getBoardStateKey();
-      const parent_key = node.parent_key;
-      const move = node.move ? node.move.toString() : null;
-      const children_keys_json = JSON.stringify(node.children_keys);
-      const black_board_hex = node.blackBoard.toString(16);
-      const white_board_hex = node.whiteBoard.toString(16);
-      const current_player = node.currentPlayer;
-      await this.db.run(
-         `INSERT OR REPLACE INTO mcts_nodes (key, parent_key, move, wins, visits, children_keys, black_board, white_board, current_player)
-             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-         [
-            key,
-            parent_key,
-            move,
-            node.wins,
-            node.visits,
-            children_keys_json,
-            black_board_hex,
-            white_board_hex,
-            current_player,
-         ]
-      );
-   }
-
-   async batchUpdateNodes(nodesToUpdate) {
-      if (!this.db || nodesToUpdate.length === 0) return;
-      const sql = `UPDATE mcts_nodes SET wins = ?, visits = ? WHERE key = ?`;
-      try {
-         await this.db.run("BEGIN TRANSACTION");
-         for (const nodeData of nodesToUpdate) {
-            await this.db.run(sql, [nodeData.wins, nodeData.visits, nodeData.key]);
-         }
-         await this.db.run("COMMIT");
-      } catch (error) {
-         console.error("[DB] Transaction failed, rolling back.", error);
-         await this.db.run("ROLLBACK");
-         throw error;
-      }
-   }
-
-   async getNodeCount() {
-      if (!this.db) {
-         console.warn("[DB] getNodeCount called before DB initialization.");
-         return 0;
-      }
-      try {
-         const result = await this.db.get("SELECT COUNT(*) as count FROM mcts_nodes");
-         return result.count;
-      } catch (error) {
-         console.error("[DB] Failed to get node count:", error);
-         return 0;
-      }
    }
 }

@@ -1,8 +1,8 @@
 import * as path from "path";
 import { fileURLToPath } from "url";
-import { MergeMCTSTreeManager } from "./MCTSTree.mjs";
-import { OthelloBoard } from "./OthelloBoard.mjs";
-import { MergeMCTSNode as MCTSNode } from "./MCTSNode.mjs";
+import { MergeMCTSTreeManager } from "../../MCTSTree.mjs";
+import { OthelloBoard } from "../../OthelloBoard.mjs";
+import { MCTSNode } from "../../MCTSNode.mjs";
 import { config } from "../../config.mjs";
 
 const __filename = fileURLToPath(import.meta.url);

@@ -1,58 +1,64 @@
 import { OthelloBoard } from "./OthelloBoard.mjs";
 import { MCTS } from "./MCTS.mjs";
-import { DatabaseManager } from "./DatabaseManager.mjs";
 import { parentPort, workerData } from "worker_threads";
 import seedrandom from "seedrandom";
 
-const { simsN, cP, workerSlotId, gamesToPlay } = workerData;
-const DB_FILE_PATH = `./mcts/mcts_w${workerSlotId}.sqlite`;
+const { simsN, cP, workerSlotId, vsRandom } = workerData;
 
-async function main() {
-   const dbManager = new DatabaseManager(DB_FILE_PATH);
-   await dbManager.init();
+async function runSelfPlayGame() {
+   console.log(`W${workerSlotId} -> New game start.`);
+   const board = new OthelloBoard();
    const rng = seedrandom(`seed-${workerSlotId}-${Date.now()}`);
-   const mcts = new MCTS(dbManager, cP, rng);
-   for (let i = 0; i < gamesToPlay; i++) {
-      parentPort.postMessage({
-         type: "game_starting",
-         workerSlotId: workerSlotId,
-         gameNumberInWorker: i + 1,
-         totalGamesInWorker: gamesToPlay,
-      });
-      const board = new OthelloBoard();
+   const mcts = new MCTS(cP, rng);
+
+   try {
       while (!board.isGameOver()) {
          const legalMoves = board.getLegalMoves();
          if (legalMoves.length === 0) {
             board.applyMove(null);
             continue;
          }
-         const legalMoveBits = legalMoves.map((m) => BigInt(m[0] * 8 + m[1]));
-         const aiMoveBit = await mcts.run(board.blackBoard, board.whiteBoard, board.currentPlayer, simsN);
-         let finalMoveBit;
-         if (aiMoveBit !== null && legalMoveBits.includes(aiMoveBit)) {
-            finalMoveBit = aiMoveBit;
+
+         let bestMoveBit;
+         if (vsRandom && board.currentPlayer === -1) {
+            const randomMove = legalMoves[Math.floor(rng() * legalMoves.length)];
+            bestMoveBit = BigInt(randomMove[0] * 8 + randomMove[1]);
          } else {
-            finalMoveBit = legalMoveBits[Math.floor(rng() * legalMoveBits.length)];
+            bestMoveBit = mcts.run(
+               board.blackBoard,
+               board.whiteBoard,
+               board.currentPlayer,
+               board.passedLastTurn,
+               simsN
+            );
+            console.log(bestMoveBit);
+            if (bestMoveBit === null) {
+               const randomMove = legalMoves[Math.floor(rng() * legalMoves.length)];
+               bestMoveBit = BigInt(randomMove[0] * 8 + randomMove[1]);
+            }
          }
-         board.applyMove(finalMoveBit);
+         board.applyMove(bestMoveBit);
+         board.display();
       }
       parentPort.postMessage({
          type: "game_finished",
          workerSlotId: workerSlotId,
-         scores: board.getScores(),
+         blackStones: board.getScores().black,
+         whiteStones: board.getScores().white,
          winner: board.getWinner(),
-         finalBlackBoard: board.blackBoard,
-         finalWhiteBoard: board.whiteBoard,
+         treeDataAI1: JSON.stringify(mcts.getSerializableTree()),
+         treeDataAI2: null,
       });
+   } catch (error) {
+      console.error(`W${workerSlotId}: Error in game loop:`, error);
+      parentPort.postMessage({ type: "game_error", workerSlotId, errorMessage: error.message });
    }
-   await dbManager.close();
 }
 
-main()
-   .then(() => {
+parentPort.on("message", (msg) => {
+   if (msg.type === "start_game") {
+      runSelfPlayGame();
+   } else if (msg.type === "terminate_now") {
       process.exit(0);
-   })
-   .catch((err) => {
-      console.error(`Worker ${workerSlotId} crashed:`, err);
-      process.exit(1);
-   });
+   }
+});

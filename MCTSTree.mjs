@@ -35,7 +35,7 @@ export class MergeMCTSTreeManager {
       }
       try {
          const serializableTree = this.rootNode.toSerializableObject();
-         const encoder = new Encoder({ maxDepth: 250 });
+         const encoder = new Encoder({ maxDepth: 500 });
          const encoded = encoder.encode(serializableTree);
          await fs.writeFile(filePath, encoded);
          if (isMainFile) console.log(`Tree saved -> ${fileName}. ${this.nodeMap.size} nodes`);
