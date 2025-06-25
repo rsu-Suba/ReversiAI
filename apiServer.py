@@ -8,7 +8,7 @@ import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2' 
 
 # --- 設定 ---
-MODEL_PATH = './Database/model_6-24-25.h5'
+MODEL_PATH = './Database/models/model_6-24-25_G1.h5'
 
 # --- Flaskアプリケーションの準備 ---
 app = Flask(__name__)

@@ -8,10 +8,9 @@ export class MCTS {
    constructor(cP, rng) {
       this.cP = cP;
       this.rng = rng || Math.random;
-      this.nodeMap = new Map();
       this.simGameBoard = new OthelloBoard();
-      this.root = new MCTSNode(OthelloBoard.blackInitBoard, OthelloBoard.whiteInitBoard, 1);
-      this.nodeMap.set(this.root.getBoardStateKey(), this.root);
+      this.nodeMap = new Map();
+      this.root = null;
    }
 
    async getPrediction(board) {
@@ -33,52 +32,46 @@ export class MCTS {
       }
    }
 
-   async run(blackBoard, whiteBoard, currentPlayer, passedLastTurn, numSimulations) {
+   async run(blackBoard, whiteBoard, currentPlayer, numSimulations, turnCount) {
       const boardKey = `${blackBoard.toString(16)}_${whiteBoard.toString(16)}_${currentPlayer}`;
-      let rootNode = this.nodeMap.get(boardKey);
-      if (!rootNode) {
-         rootNode = new MCTSNode(blackBoard, whiteBoard, currentPlayer);
-         this.nodeMap.set(boardKey, rootNode);
-      }
-      this.root = rootNode;
+      this.root = this.nodeMap.get(boardKey) || new MCTSNode(blackBoard, whiteBoard, currentPlayer);
+      if (!this.nodeMap.has(boardKey)) this.nodeMap.set(boardKey, this.root);
 
-      // 最初の展開（ルートノードの子を展開しておく）
-      if (Object.keys(this.root.children).length === 0) {
-         const prediction = await this.getPrediction(this.root);
-         if (prediction) this.expand(this.root, prediction.policy);
-      }
+      const prediction = await this.getPrediction(this.root);
+      if (prediction) {
+         this.simGameBoard.setBoardState(this.root.blackBoard, this.root.whiteBoard, this.root.currentPlayer);
+         const legalMoves = this.simGameBoard.getLegalMoves();
+         const noise = this.dirichletNoise(legalMoves.length);
+         const noisyPolicy = [...prediction.policy];
+         legalMoves.forEach((move, index) => {
+            const moveIndex = move[0] * 8 + move[1];
+            noisyPolicy[moveIndex] = noisyPolicy[moveIndex] * 0.75 + noise[index] * 0.25;
+         });
 
+         this.expand(this.root, noisyPolicy)
+      } else {
+         console.error("Initial prediction failed. Cannot start MCTS.");
+         return null;
+      }
       for (let i = 0; i < numSimulations; i++) {
          let node = this.select(this.root);
-
          this.simGameBoard.setBoardState(node.blackBoard, node.whiteBoard, node.currentPlayer);
+         let value;
          if (this.simGameBoard.isGameOver()) {
             const winner = this.simGameBoard.getWinner();
-            this.backpropagate(node, winner === node.currentPlayer ? 1.0 : -1.0);
-            continue;
-         }
-
-         const prediction = await this.getPrediction(node);
-         let value;
-         if (prediction) {
-            this.expand(node, prediction.policy);
-            value = prediction.value;
+            value = winner === 0 ? 0.0 : winner === this.root.currentPlayer ? 1.0 : -1.0;
          } else {
-            value = 0; // API失敗時は中立的な価値を返す
+            const leafPrediction = await this.getPrediction(this.simGameBoard);
+            if (leafPrediction) {
+               value = leafPrediction.value;
+               this.expand(node, leafPrediction.policy);
+            } else {
+               value = 0;
+            }
          }
          this.backpropagate(node, value);
       }
-
-      let bestMove = null,
-         maxVisits = -1;
-      for (const move in this.root.children) {
-         const child = this.root.children[move];
-         if (child.visits > maxVisits) {
-            maxVisits = child.visits;
-            bestMove = BigInt(move);
-         }
-      }
-      return bestMove;
+      return this.chooseBestMove(this.root, turnCount);
    }
 
    select(node) {
@@ -87,7 +80,7 @@ export class MCTS {
          this.simGameBoard.setBoardState(currentNode.blackBoard, currentNode.whiteBoard, currentNode.currentPlayer);
          if (this.simGameBoard.isGameOver()) break;
          currentNode = currentNode.bestChild(this.cP);
-         if (!currentNode) return node; // bestChildがnullを返す場合
+         if (!currentNode) return node;
       }
       return currentNode;
    }
@@ -95,16 +88,13 @@ export class MCTS {
    expand(node, policy) {
       this.simGameBoard.setBoardState(node.blackBoard, node.whiteBoard, node.currentPlayer);
       const legalMoves = this.simGameBoard.getLegalMoves();
-      if (legalMoves.length === 0) return node;
-
       for (const move of legalMoves) {
          const moveBit = BigInt(move[0] * 8 + move[1]);
-         if (node.children[moveBit.toString()]) continue; // 既に展開済み
-
+         const moveIndex = Number(moveBit);
+         if (node.children[moveBit.toString()]) continue;
          const nextBoard = new OthelloBoard();
          nextBoard.setBoardState(node.blackBoard, node.whiteBoard, node.currentPlayer);
          nextBoard.applyMove(moveBit);
-
          const newNode = new MCTSNode(
             nextBoard.blackBoard,
             nextBoard.whiteBoard,
@@ -112,11 +102,10 @@ export class MCTS {
             node,
             moveBit
          );
-         newNode.priorProbability = policy[Number(moveBit)];
+         newNode.priorProbability = policy[moveIndex];
          node.children[moveBit.toString()] = newNode;
          this.nodeMap.set(newNode.getBoardStateKey(), newNode);
       }
-      return node;
    }
 
    backpropagate(node, value) {
@@ -128,30 +117,42 @@ export class MCTS {
       }
    }
 
-   async saveTree(filePath) {
-      try {
-         const serializableRoot = this.root.toSerializableObject();
-         const encoder = new Encoder({ maxDepth: 500 });
-         const encoded = encoder.encode(serializableRoot);
-         await fs.writeFile(filePath, encoded);
-         return true;
-      } catch (error) {
-         console.error(`Error saving MCTS tree to ${filePath}:`, error);
-         return false;
+   chooseBestMove(rootNode, turnCount) {
+      const temperature = turnCount < 30 ? 1.0 : 0.01;
+      if (temperature === 0) {
+         let bestMove = null,
+            maxVisits = -1;
+         for (const move in rootNode.children) {
+            const child = rootNode.children[move];
+            if (child.visits > maxVisits) {
+               maxVisits = child.visits;
+               bestMove = BigInt(move);
+            }
+         }
+         return bestMove;
+      } else {
+         const moves = Object.values(rootNode.children).map((c) => c.move);
+         const visits = Object.values(rootNode.children).map((c) => c.visits ** (1 / temperature));
+         const sumVisits = visits.reduce((a, b) => a + b, 0);
+         if (sumVisits === 0) return moves[Math.floor(this.rng() * moves.length)];
+         const probabilities = visits.map((v) => v / sumVisits);
+         const randomSample = this.rng();
+         let cumulativeProb = 0;
+         for (let i = 0; i < probabilities.length; i++) {
+            cumulativeProb += probabilities[i];
+            if (randomSample < cumulativeProb) {
+               return moves[i];
+            }
+         }
+         return moves[moves.length - 1];
       }
    }
 
-   async loadTree(filePath) {
-      try {
-         const buffer = await fs.readFile(filePath);
-         const serializableRoot = decode(buffer);
-         this.root = MCTSNode.fromSerializableObject(serializableRoot);
-         this._rebuildNodeMap(this.root);
-         return true;
-      } catch (error) {
-         console.error(`Failed to load tree from ${filePath}:`, error);
-         return false;
-      }
+   dirichletNoise(count, rng) {
+      let samples = Array.from({ length: count }, () => -Math.log(1.0 - this.rng));
+      const sum = samples.reduce((a, b) => a + b, 0);
+      if (sum === 0) return Array(count).fill(1 / count);
+      return samples.map((s) => s / sum);
    }
 
    _rebuildNodeMap(rootNode) {

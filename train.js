@@ -26,6 +26,7 @@ const RESOURCE_LOG_INTERVAL_MS = 25000;
 const MEMORY_THRESHOLD_PERCENT = config.Mem_Threshold_Per || 0.85;
 const MAX_HEAP_SIZE_MB = config.Mem_Heap_Size || 2048;
 
+let gamesStartedCount = 0;
 let gamesFinishedCount = 0;
 const activeWorkers = new Map();
 const workerMemUsage = new Map();
@@ -50,6 +51,7 @@ async function startSelfPlay() {
    process.on("SIGINT", () => initiateTermination("Ctrl+C"));
    for (let i = 0; i < numParallelGames; i++) {
       startNewGameWorker(i);
+      gamesStartedCount++;
    }
 }
 
@@ -89,15 +91,13 @@ function startNewGameWorker(slotId) {
             tempManager.setRootNode(workerNode);
             mainTreeManager.mergeTrees(tempManager);
          }
-         /*
-         if (gamesFinishedCount % numParallelGames === 0) {
-            console.log("Saving");
-            console.log("Saved(no await)");
-         }
-         */
+         await mainTreeManager.saveTree(path.join(__dirname, saveFileName));
+         await mainTreeManager.saveTree(path.join(__dirname, backupFileName));
+         console.log(`Tree saved. Total nodes: ${mainTreeManager.getNodeMap().size}`);
          if (gamesFinishedCount >= totalGames) {
             initiateTermination("learning_target_reached");
-         } else {
+         } else if (gamesStartedCount < totalGames) {
+            gamesStartedCount++;
             worker.postMessage({ type: "start_game" });
          }
       } else if (msg.type === "worker_status_update") {

@@ -1,8 +1,8 @@
 export const config = {
    //Train
    parallel: 4,
-   simsN: 100,
-   cP: 1.4,
+   simsN: 200,
+   cP: 2.0,
    trainingHours: 0,
    matches: 8,
    vsRandom: false,
@@ -26,8 +26,8 @@ export const config = {
    outputMergeFile: "./Database/mcts_merged.sqlite",
 
    //decode
-   inputFile: "./Database/mcts.msgpack",
-   outputFile: "./Database/mcts.json",
+   inputFile: "../../Database/mcts.msgpack",
+   outputFile: "../../Database/mcts.json",
 
    //db to Json
    dbInputPath: "./Database/mcts_2-7M.sqlite",
