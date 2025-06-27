@@ -35,7 +35,7 @@ export class MergeMCTSTreeManager {
       }
       try {
          const serializableTree = this.rootNode.toSerializableObject();
-         const encoder = new Encoder({ maxDepth: 500 });
+         const encoder = new Encoder({ maxDepth: 250 });
          const encoded = encoder.encode(serializableTree);
          await fs.writeFile(filePath, encoded);
          if (isMainFile) console.log(`Tree saved -> ${fileName}. ${this.nodeMap.size} nodes`);
@@ -58,10 +58,42 @@ export class MergeMCTSTreeManager {
          console.log("Merged tree -> empty");
          return;
       }
-      this.rootNode.merge(otherTreeManager.rootNode);
-      const finalBeforeRebuildNodes = this.nodeMap.size;
-      this._rebuildNodeMap(this.rootNode);
-      console.log(`MCTS: Node merged ${finalBeforeRebuildNodes} -> ${this.nodeMap.size}`);
+
+      const queue = [{ mainParent: null, workerNode: otherTreeManager.rootNode }];
+      let nodesMergedCount = 0;
+
+      while (queue.length > 0) {
+         const { mainParent, workerNode } = queue.shift();
+         const workerNodeKey = workerNode.getBoardStateKey();
+
+         let existingMainNode = this.nodeMap.get(workerNodeKey);
+         let currentNodeInMainTree;
+
+         if (existingMainNode) {
+            existingMainNode.visits += workerNode.visits;
+            existingMainNode.wins += workerNode.wins;
+            currentNodeInMainTree = existingMainNode;
+         } else {
+            currentNodeInMainTree = MCTSNode.fromSerializableObject(workerNode.toSerializableObject());
+            this.nodeMap.set(workerNodeKey, currentNodeInMainTree);
+            nodesMergedCount++;
+
+            if (mainParent) {
+                if (workerNode.move !== null) {
+                    mainParent.children[workerNode.move.toString()] = currentNodeInMainTree;
+                    currentNodeInMainTree.parent = mainParent;
+                }
+            }
+         }
+
+         for (const moveBitStr in workerNode.children) {
+            if (Object.prototype.hasOwnProperty.call(workerNode.children, moveBitStr)) {
+               const workerChild = workerNode.children[moveBitStr];
+               queue.push({ mainParent: currentNodeInMainTree, workerNode: workerChild });
+            }
+         }
+      }
+      console.log(`MCTS: Merged ${nodesMergedCount} new nodes. Total nodes: ${this.nodeMap.size}`);
    }
 
    _rebuildNodeMap(rootNode) {

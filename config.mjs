@@ -3,7 +3,7 @@ export const config = {
    parallel: 4,
    simsN: 200,
    cP: 2.0,
-   trainingHours: 0,
+   trainingHours: 8,
    matches: 8,
    vsRandom: false,
 

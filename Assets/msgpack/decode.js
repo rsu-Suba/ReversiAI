@@ -1,87 +1,76 @@
-import * as fs from "fs/promises";
+import * as fs from "fs";
 import * as path from "path";
-import { decode } from "@msgpack/msgpack";
+import pkg from "@msgpack/msgpack";
+const { decode } = pkg;
 import { fileURLToPath } from "url";
 import { config } from "../../config.mjs";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const inputMsgpackPath = path.join(__dirname, config.inputFile);
-const outputJsonPath = path.join(__dirname, config.outputFile);
-const jsonIndent = 2;
+const inputMsgpackPath = path.resolve(__dirname, config.inputFile || "../../mcts_tree.msgpack");
+const outputJsonPath = path.resolve(__dirname, config.outputFile || "../../mcts.json");
+const INDENT = "  ";
 
-function jsonReplacer(key, value) {
-   if (key === "parent") {
-      return undefined;
-   }
-   if (value instanceof Map) {
-      return Object.fromEntries(value);
-   }
-   if (value instanceof Set) {
-      return Array.from(value);
-   }
-   if (typeof value === "function" || typeof value === "symbol" || value === undefined) {
-      return undefined;
+function stringifyStream(data, writeStream, indent = "") {
+   if (data === null) {
+      writeStream.write("null");
+      return;
    }
 
-   if (typeof value === "string") {
-      try {
-         const cleanedString = value.replace(/[\u0000-\u001F\u007F-\u009F]/g, (char) => {
-            console.warn(
-               `[WARNING] Found control character in string value for key "${key}": \\u${char
-                  .charCodeAt(0)
-                  .toString(16)
-                  .padStart(4, "0")}. Replacing with '?'.`
-            );
-            return "?";
-         });
-         return cleanedString;
-      } catch (e) {
-         console.error(
-            `[ERROR] Failed to process string for key "${key}": ${
-               e.message
-            }. Replacing with "[STRING_ERROR]". Original value start: "${value.substring(0, 50)}..."`
-         );
-         return "[STRING_ERROR]";
-      }
+   if (Array.isArray(data)) {
+      writeStream.write("[\n");
+      data.forEach((item, index) => {
+         writeStream.write(indent + INDENT);
+         stringifyStream(item, writeStream, indent + INDENT);
+         if (index < data.length - 1) {
+            writeStream.write(",");
+         }
+         writeStream.write("\n");
+      });
+      writeStream.write(indent + "]");
+   } else if (typeof data === "object") {
+      writeStream.write("{\n");
+      const keys = Object.keys(data);
+      keys.forEach((key, index) => {
+         writeStream.write(`${indent + INDENT}"${key}": `);
+         stringifyStream(data[key], writeStream, indent + INDENT);
+         if (index < keys.length - 1) {
+            writeStream.write(",");
+         }
+         writeStream.write("\n");
+      });
+      writeStream.write(indent + "}");
+   } else {
+      writeStream.write(JSON.stringify(data));
    }
-
-   return value;
 }
 
-async function convertMsgpackToJson(inputPath, outputPath = null, indent = null) {
-   console.log(`--- Starting MsgPack to JSON Converter ---`);
-   console.log(`Input MsgPack file: ${inputPath}`);
+function convertMsgpackToJson() {
+   console.log(`--- Starting MsgPack to JSON Stream Converter ---`);
+   console.log(`Input: ${inputMsgpackPath}`);
+   console.log(`Output: ${outputJsonPath}`);
 
    try {
-      const data = await fs.readFile(inputPath);
-      if (data.length === 0) {
-         console.error(`Error: Input file "${inputPath}" is empty.`);
+      const msgpackData = fs.readFileSync(inputMsgpackPath);
+      if (msgpackData.length === 0) {
+         console.error(`Error: Input file is empty.`);
          return;
       }
-      const decodedObject = decode(data);
-      const jsonString = JSON.stringify(decodedObject);
-      if (outputPath) {
-         await fs.writeFile(outputPath, jsonString);
-         console.log(`Successfully converted and saved JSON to: ${outputPath}`);
-      } else {
-         console.log(`\n--- Converted JSON Content ---`);
-         console.log(jsonString);
-         console.log(`\n--- End of JSON Content ---`);
-      }
+      const decodedObject = decode(msgpackData);
+      const writeStream = fs.createWriteStream(outputJsonPath);
+      console.log("Conversion in progress...");
+      stringifyStream(decodedObject, writeStream, "");
+      writeStream.end();
+
+      console.log("\n--- Conversion complete! ---");
+      console.log(`Successfully converted and saved JSON to: ${outputJsonPath}`);
    } catch (error) {
       console.error(`Error converting MsgPack to JSON: ${error.message}`);
-      console.error(
-         `This error likely means a non-serializable type or bad characters are present after MsgPack decoding.`
-      );
-      console.error(`Please check the 'jsonReplacer' function and the structure of 'decodedObject'.`);
       console.error(error);
    } finally {
       console.log(`--- Converter Finished ---`);
    }
 }
 
-convertMsgpackToJson(inputMsgpackPath, outputJsonPath, jsonIndent).catch((error) => {
-   console.error("An unhandled error occurred during conversion:", error);
-});
+convertMsgpackToJson();

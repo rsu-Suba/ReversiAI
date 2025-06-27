@@ -8,94 +8,127 @@ export class MCTSNode {
       this.currentPlayer = currentPlayer;
       this.parent = parent;
       this.move = move;
-      this.wins = 0;
       this.visits = 0;
+      this.wins = 0;
       this.children = {};
       this.untriedMoves = null;
       this.priorProbability = 0;
    }
 
-   getBoardStateKey() {
-      return `${this.blackBoard.toString(16)}_${this.whiteBoard.toString(16)}_${this.currentPlayer}`;
-   }
-
-   bestChild(C_param = config.cP) {
+   bestChild(C_param = config.cP, rng = Math.random) {
       let bestScore = -Infinity;
-      let bestChild = null;
-      for (const child of Object.values(this.children)) {
-         const qValue = child.visits > 0 ? child.wins / child.visits : 0;
-         const uValue = C_param * child.priorProbability * (Math.sqrt(this.visits) / (1 + child.visits));
-         const puctScore = qValue + uValue;
+      let bestMoves = [];
+      if (Object.keys(this.children).length === 0) {
+         return null;
+      }
+      if (this.visits < 2) {
+         let minVisits = Infinity;
+         for (const moveBitStr in this.children) {
+            const child = this.children[moveBitStr];
+            if (child.visits < minVisits) {
+               minVisits = child.visits;
+               bestMoves = [BigInt(moveBitStr)];
+            } else if (child.visits === minVisits) {
+               bestMoves.push(BigInt(moveBitStr));
+            }
+         }
+         return bestMoves[Math.floor(rng() * bestMoves.length)];
+      }
 
-         if (puctScore > bestScore) {
-            bestScore = puctScore;
-            bestChild = child;
+      for (const moveBitStr in this.children) {
+         if (Object.prototype.hasOwnProperty.call(this.children, moveBitStr)) {
+            const child = this.children[moveBitStr];
+            if (child.visits === 0) {
+               return BigInt(moveBitStr);
+            }
+            const exploitation = child.wins / child.visits;
+            const exploration = C_param * child.priorProbability * Math.sqrt(this.visits) / (1 + child.visits);
+            const uctScore = exploitation + exploration;
+
+            if (uctScore > bestScore) {
+               bestScore = uctScore;
+               bestMoves = [BigInt(moveBitStr)];
+            } else if (uctScore === bestScore) {
+               bestMoves.push(BigInt(moveBitStr));
+            }
          }
       }
-      return bestChild;
-   }
 
-   getUntriedMoves(gameBoardInstance) {
-      if (this.untriedMoves === null) {
-         gameBoardInstance.setBoardState(this.blackBoard, this.whiteBoard, this.currentPlayer);
-         this.untriedMoves = gameBoardInstance.getLegalMoves();
-      }
-      return this.untriedMoves;
+      if (bestMoves.length === 0) return null;
+      return bestMoves[Math.floor(rng() * bestMoves.length)];
    }
 
    isFullyExpanded(gameBoardInstance) {
-      return this.getUntriedMoves(gameBoardInstance).length === 0;
-   }
-
-   isTerminal(gameBoardInstance) {
       gameBoardInstance.setBoardState(this.blackBoard, this.whiteBoard, this.currentPlayer);
-      return gameBoardInstance.isGameOver();
+      const legalMovesBitboard = gameBoardInstance.getLegalMovesBitboard();
+      for (let i = 0n; i < BigInt(OthelloBoard.boardSize); i++) {
+         if (((legalMovesBitboard >> i) & 1n) !== 0n) {
+            if (!(i.toString() in this.children)) {
+               return false;
+            }
+         }
+      }
+      return true;
    }
 
    toSerializableObject() {
       const childrenSerializable = {};
-      for (const moveStr in this.children) {
-         childrenSerializable[moveStr] = this.children[moveStr].toSerializableObject();
+      for (const moveBitStr in this.children) {
+         if (Object.prototype.hasOwnProperty.call(this.children, moveBitStr)) {
+            childrenSerializable[moveBitStr] = this.children[moveBitStr].toSerializableObject();
+         }
       }
       return {
          b: this.blackBoard.toString(16),
          w: this.whiteBoard.toString(16),
          c: this.currentPlayer,
-         m: this.move ? this.move.toString() : null,
-         wi: this.wins,
+         m: this.move ? this.move.toString(10) : null,
          v: this.visits,
+         wi: this.wins,
          ch: childrenSerializable,
+         pP: this.priorProbability,
       };
    }
 
-   static fromSerializableObject(serializableNodeData, parentNode = null) {
+   static fromSerializableObject(serializableNodeData) {
       const node = new MCTSNode(
          BigInt("0x" + serializableNodeData.b),
          BigInt("0x" + serializableNodeData.w),
          serializableNodeData.c,
-         parentNode,
-         serializableNodeData.m ? BigInt("0x" + serializableNodeData.m) : null
+         null,
+         serializableNodeData.m ? BigInt(serializableNodeData.m) : null
       );
       node.visits = serializableNodeData.v;
       node.wins = serializableNodeData.wi;
+      node.untriedMoves = null;
+      node.priorProbability = serializableNodeData.pP || 0;
 
       for (const moveBitStr in serializableNodeData.ch) {
-         const childNode = MCTSNode.fromSerializableObject(serializableNodeData.ch[moveBitStr], node);
+         const childNode = MCTSNode.fromSerializableObject(serializableNodeData.ch[moveBitStr]);
          node.children[moveBitStr] = childNode;
       }
       return node;
    }
 
    merge(otherNode) {
+      if (!otherNode) return;
       this.wins += otherNode.wins;
       this.visits += otherNode.visits;
-      for (const moveStr in otherNode.children) {
-         const otherChild = otherNode.children[moveStr];
-         if (this.children[moveStr]) {
-            this.children[moveStr].merge(otherChild);
-         } else {
-            this.children[moveStr] = MCTSNode.fromSerializableObject(otherChild.toSerializableObject(), this);
+      this.untriedMoves = null;
+
+      for (const moveBitStr in otherNode.children) {
+         if (Object.prototype.hasOwnProperty.call(otherNode.children, moveBitStr)) {
+            const otherChild = otherNode.children[moveBitStr];
+            if (this.children[moveBitStr]) {
+               this.children[moveBitStr].merge(otherChild);
+            } else {
+               this.children[moveBitStr] = MCTSNode.fromSerializableObject(otherChild.toSerializableObject());
+            }
          }
       }
+   }
+
+   getBoardStateKey() {
+      return `${this.blackBoard.toString(16)}_${this.whiteBoard.toString(16)}_${this.currentPlayer}`;
    }
 }

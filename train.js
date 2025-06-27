@@ -12,6 +12,7 @@ const numParallelGames = config.parallel;
 const simsN = config.simsN;
 const cP = config.cP;
 const totalGames = config.matches;
+const trainingHours = config.trainingHours;
 const vsRandom = config.vsRandom;
 
 const saveFileName = config.treeSavePath;
@@ -21,10 +22,13 @@ const __dirname = path.dirname(__filename);
 const saveFilePath = path.join(__dirname, saveFileName);
 const backupFilePath = path.join(__dirname, backupFileName);
 
-const MEMORY_CHECK_INTERVAL_MS = config.Mem_Check_Interval || 5000;
+const MEMORY_CHECK_INTERVAL_MS = config.Mem_Check_Interval;
+const MEMORY_THRESHOLD_PERCENT = config.Mem_Threshold_Per;
+const MAX_HEAP_SIZE_MB = config.Mem_Heap_Size;
 const RESOURCE_LOG_INTERVAL_MS = 25000;
-const MEMORY_THRESHOLD_PERCENT = config.Mem_Threshold_Per || 0.85;
-const MAX_HEAP_SIZE_MB = config.Mem_Heap_Size || 2048;
+
+let trainingStartTime = Date.now();
+let trainingEndTime;
 
 let gamesStartedCount = 0;
 let gamesFinishedCount = 0;
@@ -43,15 +47,24 @@ const mainTreeManager = new MergeMCTSTreeManager();
 
 async function startSelfPlay() {
    console.log("\n--- Starting Parallel Play ---");
-   console.log(`Sim:${simsN}, Parallel:${numParallelGames}, Matches:${totalGames}`);
+   console.log(`Sim:${simsN}, Parallel:${numParallelGames}`);
+   if (trainingHours > 0) {
+      trainingEndTime = trainingStartTime + trainingHours * 60 * 60 * 1000;
+      console.log(`Training: ${trainingHours} hrs -> (${new Date(trainingEndTime).toLocaleString()}).`);
+   } else {
+      console.log(`Total Games: ${totalGames}`);
+   }
    await loadMCTSTree(mainTreeManager, saveFilePath, backupFilePath);
    logResorceUsage();
    resCheckInterval = setInterval(logResorceUsage, RESOURCE_LOG_INTERVAL_MS);
    memoryCheckInterval = setInterval(checkMemoryUsage, MEMORY_CHECK_INTERVAL_MS);
    process.on("SIGINT", () => initiateTermination("Ctrl+C"));
    for (let i = 0; i < numParallelGames; i++) {
-      startNewGameWorker(i);
-      gamesStartedCount++;
+      if (isLearningActive()) {
+         startNewGameWorker(i);
+      } else {
+         break;
+      }
    }
 }
 
@@ -84,24 +97,28 @@ function startNewGameWorker(slotId) {
             winner = "White";
          }
          console.log(`Scores: ${msg.blackStones} / ${msg.whiteStones}, Winner: ${winner}`);
-
+         let progress = `Progress: ${gamesFinishedCount} / ${totalGames} games`;
+         if (trainingHours > 0) {
+            const timeLeft = trainingEndTime - new Date();
+            const hours = Math.floor(timeLeft / (1000 * 60 * 60));
+            const minutes = String(Math.floor((timeLeft % (1000 * 60 * 60)) / (1000 * 60))).padStart(2, "0");
+            const seconds = String(Math.floor((timeLeft % (1000 * 60)) / 1000)).padStart(2, "0");
+            progress = `Est : ${hours}:${minutes}:${seconds}`;
+         }
+         console.log(`${progress}\n`);
          if (msg.treeDataAI1) {
             const workerNode = MCTSNode.fromSerializableObject(JSON.parse(msg.treeDataAI1));
             const tempManager = new MergeMCTSTreeManager();
             tempManager.setRootNode(workerNode);
             mainTreeManager.mergeTrees(tempManager);
+            await mainTreeManager.saveTree(saveFilePath, saveFileName, true);
          }
-         await mainTreeManager.saveTree(path.join(__dirname, saveFileName));
-         await mainTreeManager.saveTree(path.join(__dirname, backupFileName));
-         console.log(`Tree saved. Total nodes: ${mainTreeManager.getNodeMap().size}`);
-         if (gamesFinishedCount >= totalGames) {
-            initiateTermination("learning_target_reached");
-         } else if (gamesStartedCount < totalGames) {
+         if (isLearningActive()) {
             gamesStartedCount++;
             worker.postMessage({ type: "start_game" });
+         } else {
+            initiateTermination("learning_target_reached");
          }
-      } else if (msg.type === "worker_status_update") {
-         workerMemUsage.set(slotId, msg.heapUsedMB);
       } else if (msg.type === "game_error") {
          console.error(`--- Game Error (W${msg.workerSlotId}) ---`);
          console.error(`Error: ${msg.errorMessage}`);
@@ -198,6 +215,14 @@ function logResorceUsage() {
          mainTreeManager.getNodeMap().size
       } (${formatCurrentDateTime()}) |||\n`
    );
+}
+
+function isLearningActive() {
+   if (trainingHours > 0) {
+      return Date.now() < trainingEndTime;
+   } else {
+      return gamesStartedCount < totalGames;
+   }
 }
 
 startSelfPlay();

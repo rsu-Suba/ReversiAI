@@ -1,13 +1,12 @@
 import { OthelloBoard } from "./OthelloBoard.mjs";
 import { MCTS } from "./MCTS.mjs";
-import { MCTSNode } from "./MCTSNode.mjs";
 import { parentPort, workerData } from "worker_threads";
 import seedrandom from "seedrandom";
 
 const { simsN, cP, workerSlotId, vsRandom } = workerData;
 
-async function runSelfPlayGame(treeData) {
-   console.log(`W${workerSlotId} -> New game start.`);
+async function runSelfPlayGame() {
+   console.log(`W${workerSlotId}: Playing now.`);
    const board = new OthelloBoard();
    const rng = seedrandom(`seed-${workerSlotId}-${Date.now()}`);
    const mcts = new MCTS(cP, rng);
@@ -27,15 +26,23 @@ async function runSelfPlayGame(treeData) {
             const randomMove = legalMoves[Math.floor(rng() * legalMoves.length)];
             bestMoveBit = BigInt(randomMove[0] * 8 + randomMove[1]);
          } else {
-            bestMoveBit = await mcts.run(board.blackBoard, board.whiteBoard, board.currentPlayer, simsN, turn);
+            bestMoveBit = await mcts.run(
+               board.blackBoard,
+               board.whiteBoard,
+               board.currentPlayer,
+               board.passedLastTurn,
+               simsN,
+               turn
+            );
             if (bestMoveBit === null) {
                const randomMove = legalMoves[Math.floor(rng() * legalMoves.length)];
                bestMoveBit = BigInt(randomMove[0] * 8 + randomMove[1]);
             }
          }
          board.applyMove(bestMoveBit);
-         board.display();
+         //board.display();
       }
+      //board.display();
       parentPort.postMessage({
          type: "game_finished",
          workerSlotId: workerSlotId,
@@ -43,6 +50,7 @@ async function runSelfPlayGame(treeData) {
          whiteStones: board.getScores().white,
          winner: board.getWinner(),
          treeDataAI1: JSON.stringify(mcts.getSerializableTree()),
+         treeDataAI2: null,
       });
    } catch (error) {
       console.error(`W${workerSlotId}: Error in game loop:`, error);
@@ -52,7 +60,7 @@ async function runSelfPlayGame(treeData) {
 
 parentPort.on("message", (msg) => {
    if (msg.type === "start_game") {
-      runSelfPlayGame(msg.treeData);
+      runSelfPlayGame();
    } else if (msg.type === "terminate_now") {
       process.exit(0);
    }

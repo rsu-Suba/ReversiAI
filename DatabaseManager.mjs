@@ -56,13 +56,9 @@ export class DatabaseManager {
    }
 
    batchSaveNodesMerge(nodesToSave) {
-      // 保存するノードがなければ、何もしない
       if (!nodesToSave || nodesToSave.length === 0) return;
-
-      // better-sqlite3の、非常に高速なトランザクション機能を利用
       const transaction = this.db.transaction((nodes) => {
          for (const nodeData of nodes) {
-            // MCTSNodeオブジェクトではなく、プレーンなデータオブジェクトを直接扱う
             this.upsertNodeStmt.run({
                key: nodeData.key,
                parent_key: nodeData.parent_key,
@@ -76,17 +72,11 @@ export class DatabaseManager {
             });
          }
       });
-
-      // 作成したトランザクションを実行
       transaction(nodesToSave);
    }
 
-   // DatabaseManager.mjs に追加するメソッド
-
-   // データベースから読み取った形式の、プレーンなデータオブジェクトの配列を直接保存する
    batchSaveNodesFromData(nodesData) {
       if (nodesData.length === 0) return;
-
       const transaction = this.db.transaction((nodes) => {
          for (const nodeData of nodes) {
             this.upsertNodeStmt.run({
@@ -129,11 +119,7 @@ export class DatabaseManager {
 
    getNode(key) {
       const row = this.getNodeStmt.get(key);
-      if (!row) {
-         //console.log(`No row ${key}`);
-         return null;
-      }
-      //console.log(`${key} found`);
+      if (!row) return null;
       return {
          key: row.key,
          parent_key: row.parent_key,
