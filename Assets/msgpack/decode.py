@@ -26,7 +26,7 @@ def convert_msgpack_to_jsonl(input_path, output_path):
 
 
 if __name__ == '__main__':
-    input_file_path = '/home/suba/ReversiAI/Database/mcts.msgpack'
-    output_file_path = '/home/suba/ReversiAI/Database/mcts.json'
+    input_file_path = './Database/training_data/1G/mcts_tree_final_1751387600.msgpack'
+    output_file_path = './ReversiAI/Database/mcts.json'
     
     convert_msgpack_to_jsonl(input_file_path, output_file_path)

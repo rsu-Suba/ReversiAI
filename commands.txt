@@ -5,6 +5,10 @@ Reviewing
 node review.js
 node reviewHuman.js
 
+Server
+kill -9 $(lsof -t -i:8501)
+streamlit run app.py --server.port 8501 --server.address 0.0.0.0
+
 Properties
 Study
 Parallel game coats: parallel

@@ -1,0 +1,30 @@
+TRAINING_DATA_DIR = './Database/training_data'
+MODELS_DIR = './Database/models'
+
+# Train
+CURRENT_GENERATION_DATA_SUBDIR = '8G'
+SELF_PLAY_MODEL_PATH = f'{MODELS_DIR}/7G_07-09-25.h5'
+TRAINED_MODEL_SAVE_PATH = f'{MODELS_DIR}/8G_07-10-25.h5'
+
+NUM_PARALLEL_GAMES = 4
+SIMS_N = 100
+C_PUCT = 1.41
+TOTAL_GAMES = 300
+TRAINING_HOURS = 0
+SAVE_DATA_EVERY_N_GAMES = 10
+VS_RANDOM = False
+
+# trainModel
+EPOCHS = 30
+BATCH_SIZE = 256
+
+# Review
+Model_Path = f'{MODELS_DIR}/8G_08-10-25.h5'
+Play_Games_Num = 100
+
+# compare_models
+NUM_GAMES_COMPARE = 10
+Model1_Path = f'{MODELS_DIR}/7G_07-09-25.h5'
+Model2_Path = f'{MODELS_DIR}/8G_07-10-25.h5'
+Model1_Name = "7G"
+Model2_Name = "8G"
