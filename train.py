@@ -9,6 +9,7 @@ import multiprocessing
 import json
 
 from reversi_bitboard_cpp import ReversiBitboard
+from reversi_mcts_cpp import MCTS as MCTS_CPP
 
 def _print_numpy_board(board_1d):
     print("  0 1 2 3 4 5 6 7")
@@ -39,240 +40,130 @@ from config import (
     C_PUCT,
     TOTAL_GAMES,
     TRAINING_HOURS,
-    VS_RANDOM,
     TRAINING_DATA_DIR,
     CURRENT_GENERATION_DATA_SUBDIR,
     SAVE_DATA_EVERY_N_GAMES,
     SELF_PLAY_MODEL_PATH,
-    EPOCHS,
-    BATCH_SIZE
+    MCTS_PREDICT_BATCH_SIZE
 )
 
-def board_to_input_planes_tf(board_1d_tf, current_player_tf):
-    player_plane = tf.zeros((8, 8), dtype=tf.float32)
-    opponent_plane = tf.zeros((8, 8), dtype=tf.float32)
-    board_2d_tf = tf.reshape(board_1d_tf, (8, 8))
-    current_player_mask = tf.cast(tf.equal(board_2d_tf, current_player_tf), tf.float32)
-    opponent_player_mask = tf.cast(tf.equal(board_2d_tf, 3 - current_player_tf), tf.float32)
+def board_to_input_planes_tf(board_1d_batch_tf, current_player_batch_tf):
+    # board_1d_batch_tf: [batch_size, 64]
+    # current_player_batch_tf: [batch_size]
+
+    batch_size = tf.shape(board_1d_batch_tf)[0]
+
+    player_plane = tf.zeros((batch_size, 8, 8), dtype=tf.float32)
+    opponent_plane = tf.zeros((batch_size, 8, 8), dtype=tf.float32)
+
+    board_2d_batch_tf = tf.reshape(board_1d_batch_tf, (batch_size, 8, 8))
+
+    # current_player_batch_tfを[batch_size, 1, 1]に拡張してブロードキャスト可能にする
+    current_player_batch_expanded = tf.expand_dims(tf.expand_dims(current_player_batch_tf, -1), -1)
+
+    current_player_mask = tf.cast(tf.equal(board_2d_batch_tf, current_player_batch_expanded), tf.float32)
+    opponent_player_mask = tf.cast(tf.equal(board_2d_batch_tf, 3 - current_player_batch_expanded), tf.float32)
+
     player_plane += current_player_mask
     opponent_plane += opponent_player_mask
-    return tf.stack([player_plane, opponent_plane], axis=-1)
 
-class MCTSNode:
-    def __init__(self, game_board: ReversiBitboard, player, parent=None, move=None, prior_p=0.0):
-        self.game_board = game_board
-        self.player = player
-        self.parent = parent
-        self.move = move
-        self.prior_p = prior_p
-        self.children = {}
-        self.n_visits = 0
-        self.q_value = 0.0
-        self.sum_value = 0.0
-        self._legal_moves = None
+    return tf.stack([player_plane, opponent_plane], axis=-1) # Result shape: [batch_size, 8, 8, 2]
 
-    def _get_legal_moves(self):
-        if self._legal_moves is None:
-            self._legal_moves = self.game_board.get_legal_moves()
-        return self._legal_moves
-
-    def ucb_score(self, c_puct):
-        if self.n_visits == 0: return float('inf')
-        return -self.q_value + c_puct * self.prior_p * math.sqrt(self.parent.n_visits) / (1 + self.n_visits)
-
-    def select_child(self, c_puct):
-        return max(self.children.values(), key=lambda child: child.ucb_score(c_puct))
-
-    def is_fully_expanded(self):
-        return len(self.children) == len(self._get_legal_moves())
-
-    def update(self, value):
-        self.n_visits += 1
-        self.sum_value += value
-        self.q_value = self.sum_value / self.n_visits
-
-    def get_policy_distribution(self, temperature=2.0):
-        if not self.children: return np.zeros(64)
-        visits = np.array([child.n_visits for child in self.children.values()])
-        moves = list(self.children.keys())
-        if temperature == 0:
-            best_move_idx = np.argmax(visits)
-            policy = np.zeros(64)
-            policy[moves[best_move_idx]] = 1.0
-            return policy
-
-        max_visits = np.max(visits)
-        exp_visits = np.exp((visits - max_visits) / temperature)
-        probabilities = exp_visits / np.sum(exp_visits)
-
-        full_policy = np.zeros(64)
-        for i, move in enumerate(moves):
-            full_policy[move] = probabilities[i]
-        return full_policy
-
-    def to_dict(self):
-        children_dict = {str(move): child.to_dict() for move, child in self.children.items()}
-        return {
-            'b': self.game_board.black_board,
-            'w': self.game_board.white_board,
-            'p': self.player,
-            'h': self.game_board.history,
-            'v': self.n_visits,
-            'q': float(self.q_value),
-            'pr': float(self.prior_p),
-            'ch': children_dict
-        }
-
-    @classmethod
-    def from_dict(cls, data, parent=None):
-        node = cls(ReversiBitboard(), data['p'], parent=parent, move=None, prior_p=data['pr'])
-        node.game_board.black_board = data['b']
-        node.game_board.white_board = data['w']
-        node.game_board.history = data.get('h', [])
-        node.n_visits = data['v']
-        node.q_value = data['q']
-        node.sum_value = node.q_value * node.n_visits
-        if 'ch' in data:
-            for move_str, child_data in data['ch'].items():
-                node.children[int(move_str)] = MCTSNode.from_dict(child_data, parent=node)
-        return node
-
-class MCTS:
-    def __init__(self, model, c_puct=C_PUCT):
-        self.model = model
-        self.c_puct = c_puct
-        self.root = None
-        self.initial_root = None
-        self._predict_graph = tf.function(
-            self._predict_internal,
+class ModelWrapper:
+    def __init__(self, model_path):
+        self.model = tf.keras.models.load_model(model_path)
+        self._predict_internal_cpp = tf.function(
+            self._predict_for_cpp,
             input_signature=[
-                tf.TensorSpec(shape=[64], dtype=tf.int8),
-                tf.TensorSpec(shape=(), dtype=tf.int8)
+                tf.TensorSpec(shape=[None, 64], dtype=tf.int8),
+                tf.TensorSpec(shape=[None], dtype=tf.int32)
             ]
         )
 
-    def get_initial_root_for_serialization(self):
-        return self.initial_root.to_dict() if self.initial_root else None
-
-    def _predict_internal(self, board_tensor, player_tensor):
-        input_planes = board_to_input_planes_tf(board_tensor, player_tensor)
-        input_tensor_batch = tf.expand_dims(input_planes, axis=0)
-        policy, value = self.model(input_tensor_batch, training=False)
-        return policy[0], value[0][0]
-
-    def _predict(self, board_numpy, player):
-        board_tensor = tf.convert_to_tensor(board_numpy, dtype=tf.int8)
-        player_tensor = tf.convert_to_tensor(player, dtype=tf.int8)
-        policy, value = self._predict_graph(board_tensor, player_tensor)
-        return policy.numpy(), value.numpy()
-
-    def update_root(self, move):
-        if move in self.root.children:
-            self.root = self.root.children[move]
-            self.root.parent = None
-        else:
-            self.root = MCTSNode(self.root.game_board, self.root.player)
-
-    def search(self, game_board: ReversiBitboard, player, num_simulations):
-        if self.root is None:
-            self.root = MCTSNode(game_board, player)
-        if self.initial_root is None:
-            self.initial_root = self.root
-
-        for _ in range(num_simulations):
-            node = self.root
-            sim_game_board = ReversiBitboard()
-            sim_game_board.black_board = game_board.black_board
-            sim_game_board.white_board = game_board.white_board
-            sim_game_board.current_player = game_board.current_player
-            sim_game_board.passed_last_turn = game_board.passed_last_turn
-            sim_player = player
-            path = [node]
-
-            while node.is_fully_expanded() and node.children and not sim_game_board.is_game_over():
-                selected_child = node.select_child(self.c_puct)
-                sim_game_board.apply_move(selected_child.move)
-                sim_player = sim_game_board.current_player
-                node = selected_child
-                path.append(node)
-
-            value = 0
-            if not sim_game_board.is_game_over():
-                policy, value = self._predict(sim_game_board.board_to_numpy(), sim_player)
-                valid_moves = sim_game_board.get_legal_moves()
-                if valid_moves:
-                    sum_policy = sum(policy[m] for m in valid_moves)
-                    if sum_policy <= 0 or np.isnan(sum_policy) or np.isinf(sum_policy):
-                        sum_policy = 1e-9
-
-                    for move in valid_moves:
-                        if move not in node.children:
-                            new_game_board = ReversiBitboard()
-                            new_game_board.black_board = sim_game_board.black_board
-                            new_game_board.white_board = sim_game_board.white_board
-                            new_game_board.current_player = sim_game_board.current_player
-                            new_game_board.passed_last_turn = sim_game_board.passed_last_turn
-                            new_game_board.history = sim_game_board.history[:]
-                            new_game_board.apply_move(move)
-                            prior = policy[move] / sum_policy
-                            node.children[move] = MCTSNode(new_game_board, new_game_board.current_player, parent=node, move=move, prior_p=prior)
-            else:
-                winner = sim_game_board.get_winner()
-                value = 0 if winner == 0 else (1 if winner == sim_player else -1)
-
-            current_value_for_node = value
-            for node_in_path in reversed(path):
-                node_in_path.update(current_value_for_node)
-                current_value_for_node = -current_value_for_node
-
-        return self.root
+    def _predict_for_cpp(self, board_batch_tensor, player_batch_tensor):
+        input_planes_batch = board_to_input_planes_tf(tf.cast(board_batch_tensor, tf.int32), tf.cast(player_batch_tensor, tf.int32))
+        
+        policy, value = self.model(input_planes_batch, training=False)
+        return policy, tf.squeeze(value, axis=-1)
 
 def run_self_play_game_worker(game_id, model_path, sims_n, c_puct):
     print(f"G{game_id}: Game start")
     seed = (os.getpid() + int(time.time() * 1000) + game_id) % (2**32)
     random.seed(seed)
     np.random.seed(seed)
+    
     try:
-        model = tf.keras.models.load_model(model_path)
+        model_wrapper = ModelWrapper(model_path)
     except Exception as e:
         print(f"G{game_id}: Model load error: {e}")
-        return {'error': True, 'message': str(e)}
+        return None
 
     game_board = ReversiBitboard()
     game_board.history = []
-    current_player = random.choice([1, 2])
+    current_player = 1 # Black always starts for simplicity in data collection
     game_board.current_player = current_player
 
-    mcts_ai = MCTS(model, c_puct=c_puct)
-    mcts_ai.root = MCTSNode(game_board, current_player)
-    mcts_ai.initial_root = mcts_ai.root
+    mcts_ai = MCTS_CPP(model_wrapper, c_puct=c_puct, batch_size=MCTS_PREDICT_BATCH_SIZE)
+
+    game_history = []
 
     while not game_board.is_game_over():
         legal_moves = game_board.get_legal_moves()
         if not legal_moves:
-            game_board.apply_move(-1)
+            game_board.apply_move(-1) # Pass
             current_player = game_board.current_player
             continue
 
-        root_node = mcts_ai.search(game_board, current_player, sims_n)
-        if not root_node.children:
-            best_move = random.choice(legal_moves)
-        else:
+        add_noise = len(game_board.history) < 30
+        root_node = mcts_ai.search(game_board, current_player, sims_n, add_noise)
+
+        # Create policy target from visit counts
+        policy_target = np.zeros(64, dtype=np.float32)
+        if root_node.children:
+            total_visits = 0
+            for move, child in root_node.children.items():
+                total_visits += child.n_visits
+            if total_visits > 0:
+                for move, child in root_node.children.items():
+                    policy_target[move] = child.n_visits / total_visits
+
+        game_history.append({
+            'board': game_board.board_to_numpy().tolist(),
+            'player': current_player,
+            'policy': policy_target.tolist()
+        })
+
+        # Choose move
+        if len(game_board.history) < 30:
+            # Probabilistic move choice
             moves = list(root_node.children.keys())
-            visit_counts = np.array([child.n_visits for child in root_node.children.values()])
-            if len(game_board.history) < 30:
-                probabilities = visit_counts / np.sum(visit_counts)
-                best_move = np.random.choice(moves, p=probabilities)
+            visits = [child.n_visits for child in root_node.children.values()]
+            if sum(visits) == 0:
+                best_move = random.choice(legal_moves)
             else:
-                best_move = moves[np.argmax(visit_counts)]
+                probabilities = np.array(visits, dtype=np.float32) / sum(visits)
+                best_move = np.random.choice(moves, p=probabilities)
+        else:
+            # Deterministic move choice
+            best_move = max(root_node.children.items(), key=lambda item: item[1].n_visits)[0]
 
         game_board.apply_move(best_move)
-        mcts_ai.update_root(best_move)
         current_player = game_board.current_player
 
     winner = game_board.get_winner()
     print(f"G{game_id}: Game finish, winner: {winner}")
-    return mcts_ai.get_initial_root_for_serialization()
+    _print_numpy_board(game_board.board_to_numpy())
+
+    # Assign final value to all states in the history
+    for record in game_history:
+        if winner == 0:
+            record['value'] = 0.0
+        elif record['player'] == winner:
+            record['value'] = 1.0
+        else:
+            record['value'] = -1.0
+            
+    return game_history
 
 def _worker_wrapper(args):
     return run_self_play_game_worker(*args)
@@ -289,22 +180,20 @@ def train_model_main():
     with ctx.Pool(NUM_PARALLEL_GAMES) as pool:
         game_args = [(i + 1, SELF_PLAY_MODEL_PATH, SIMS_N, C_PUCT) for i in range(TOTAL_GAMES)]
 
-        for game_tree_result in pool.imap_unordered(_worker_wrapper, game_args):
-            if game_tree_result is None or 'error' in game_tree_result:
-                error_message = game_tree_result.get('message', 'error') if game_tree_result else "Worker returned None"
-                print(f"Main process: Skiped game due to worker error: {error_message}")
+        for game_history_result in pool.imap_unordered(_worker_wrapper, game_args):
+            if game_history_result is None:
+                print(f"Main process: Skiped game due to worker error.")
                 continue
 
-            game_results_buffer.append(game_tree_result)
+            game_results_buffer.extend(game_history_result)
             games_played += 1
 
             if games_played > 0 and games_played % SAVE_DATA_EVERY_N_GAMES == 0:
-                tree_filename = f"mcts_tree_{games_played}.msgpack"
-                tree_filepath = os.path.join(generation_data_path, tree_filename)
-                with open(tree_filepath, "wb") as f:
-                    for game_tree in game_results_buffer:
-                        msgpack.pack(game_tree, f)
-                print(f"{len(game_results_buffer)} game trees saved -> {tree_filepath}")
+                data_filename = f"mcts_tree_{games_played}.msgpack"
+                data_filepath = os.path.join(generation_data_path, data_filename)
+                with open(data_filepath, "wb") as f:
+                    msgpack.pack(game_results_buffer, f)
+                print(f"{len(game_results_buffer)} states from {games_played} games saved -> {data_filepath}")
                 game_results_buffer.clear()
 
             if TRAINING_HOURS > 0 and (time.time() - training_start_time) / 3600 >= TRAINING_HOURS:
@@ -317,16 +206,15 @@ def train_model_main():
     print(f"Train finish, Games: {games_played}")
 
     if game_results_buffer:
-        final_tree_filename = f"mcts_tree_{games_played}.msgpack"
-        final_tree_filepath = os.path.join(generation_data_path, final_tree_filename)
-        with open(final_tree_filepath, "wb") as f:
-            for game_tree in game_results_buffer:
-                msgpack.pack(game_tree, f)
-        print(f"Final save: {len(game_results_buffer)} game trees saved -> {final_tree_filepath}")
+        final_data_filename = f"mcts_tree_{games_played}.msgpack"
+        final_data_filepath = os.path.join(generation_data_path, final_data_filename)
+        with open(final_data_filepath, "wb") as f:
+            msgpack.pack(game_results_buffer, f)
+        print(f"Final save: {len(game_results_buffer)} states saved -> {final_data_filepath}")
     else:
-        print("No final trees")
+        print("No final data to save")
 
-    print("Trained data created")
+    print("Self-play data created")
 
 if __name__ == "__main__":
     train_model_main()

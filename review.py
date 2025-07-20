@@ -1,12 +1,12 @@
 import numpy as np
 import random
 import tensorflow as tf
-from config import SIMS_N, C_PUCT, Model_Path, Play_Games_Num
+from config import R_SIMS_N, C_PUCT, Model_Path, Play_Games_Num
 import math
 from reversi_bitboard_cpp import ReversiBitboard
 
 NUM_GAMES_TO_PLAY = Play_Games_Num
-MCTS_SIMS_PER_MOVE = SIMS_N
+MCTS_SIMS_PER_MOVE = R_SIMS_N
 MODEL_PATH = Model_Path
 
 def board_to_input_planes_tf(board_1d_tf, current_player_tf):

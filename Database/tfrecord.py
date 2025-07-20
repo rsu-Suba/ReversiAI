@@ -11,8 +11,9 @@ from tqdm import tqdm
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
+tf.config.set_visible_devices([], 'GPU')
+
 from config import TRAINING_DATA_DIR, CURRENT_GENERATION_DATA_SUBDIR, NUM_PARALLEL_GAMES
-from reversi_bitboard_cpp import ReversiBitboard
 
 def _bytes_feature(value):
     if isinstance(value, type(tf.constant(0))):
@@ -31,57 +32,50 @@ def serialize_sample(input_planes, policy, value):
     example_proto = tf.train.Example(features=tf.train.Features(feature=feature))
     return example_proto.SerializeToString()
 
+def board_to_input_planes_tf(board_1d_tf, current_player_tf):
+    player_plane = tf.zeros((8, 8), dtype=tf.float32)
+    opponent_plane = tf.zeros((8, 8), dtype=tf.float32)
+    board_2d_tf = tf.reshape(board_1d_tf, (8, 8))
+    current_player_mask = tf.cast(tf.equal(board_2d_tf, current_player_tf), tf.float32)
+    opponent_player_mask = tf.cast(tf.equal(board_2d_tf, 3 - current_player_tf), tf.float32)
+    player_plane += current_player_mask
+    opponent_plane += opponent_player_mask
+    return tf.stack([player_plane, opponent_plane], axis=-1)
+
 def process_and_write_file(args):
     msgpack_path, output_path = args
-    dummy_board = ReversiBitboard()
     sample_count = 0
 
     try:
         with tf.io.TFRecordWriter(output_path) as writer:
             with open(msgpack_path, 'rb') as f:
                 unpacker = msgpack.Unpacker(f, raw=False, use_list=True)
-                for root_node_dict in unpacker:
-                    if not root_node_dict: continue
+                for game_history in unpacker:
+                    # game_history is now a list of dicts, not a single root_node_dict
+                    if not game_history: continue
 
-                    queue = collections.deque([root_node_dict])
-                    while queue:
-                        node_dict = queue.popleft()
+                    for record in game_history:
+                        board_np = np.array(record['board'], dtype=np.int8)
+                        player = record['player']
+                        policy_np = np.array(record['policy'], dtype=np.float32)
+                        value = record['value']
 
-                        children = node_dict.get('ch', {})
-                        if not children or node_dict.get('v', 0) == 0: continue
+                        # Convert numpy arrays to TensorFlow tensors
+                        board_tf = tf.convert_to_tensor(board_np, dtype=tf.int8)
+                        player_tf = tf.convert_to_tensor(player, dtype=tf.int32)
+                        policy_tf = tf.convert_to_tensor(policy_np, dtype=tf.float32)
+                        value_tf = tf.convert_to_tensor(value, dtype=tf.float32)
 
-                        value = np.float32(node_dict.get('q'))
-                        if np.isnan(value) or np.isinf(value): continue
+                        input_planes = board_to_input_planes_tf(board_tf, tf.cast(player_tf, tf.int8))
 
-                        moves = [int(k) for k in children.keys()]
-                        visits = np.array([child.get('v', 0) for child in children.values()], dtype=np.float32)
+                        if np.any(tf.math.is_nan(input_planes)) or np.any(tf.math.is_inf(input_planes)): continue
+                        if np.any(tf.math.is_nan(policy_tf)) or np.any(tf.math.is_inf(policy_tf)): continue
+                        if tf.math.is_nan(value_tf) or tf.math.is_inf(value_tf): continue
 
-                        if np.sum(visits) <= 0: continue
-
-                        temperature = 2.0
-                        scaled_visits = visits / temperature
-                        max_scaled_visits = np.max(scaled_visits)
-                        exp_visits = np.exp(scaled_visits - max_scaled_visits)
-                        probabilities = exp_visits / np.sum(exp_visits)
-                        policy = np.zeros(64, dtype=np.float32)
-                        for move, prob in zip(moves, probabilities):
-                            policy[move] = prob
-
-                        if np.any(np.isnan(policy)) or not np.isclose(np.sum(policy), 1.0): continue
-
-                        dummy_board.black_board = node_dict.get('b')
-                        dummy_board.white_board = node_dict.get('w')
-                        player = node_dict.get('p')
-                        input_planes = dummy_board.board_to_input_planes(player)
-
-                        if np.any(np.isnan(input_planes)) or np.any(np.isinf(input_planes)): continue
-
-                        serialized_sample = serialize_sample(input_planes, policy, value)
+                        serialized_sample = serialize_sample(input_planes, policy_tf, value_tf)
                         writer.write(serialized_sample)
                         sample_count += 1
 
-                        for child_dict in children.values():
-                            queue.append(child_dict)
     except Exception as e:
         print(f"File error {os.path.basename(msgpack_path)}: {e}")
         return 0
@@ -105,6 +99,7 @@ if __name__ == "__main__":
     for old_file in glob.glob(os.path.join(val_output_dir, "*.tfrecord")): os.remove(old_file)
     print(f"Deleted old tfrecord -> {train_output_dir}, {val_output_dir}")
 
+    # Change glob pattern to match new data file names
     msgpack_files = glob.glob(os.path.join(source_dir, 'mcts_tree_*.msgpack'))
     if not msgpack_files:
         print(f"No msgpack ->{source_dir}")
@@ -142,4 +137,3 @@ if __name__ == "__main__":
         print(f"Val converted: {total_val_samples} samples")
 
     print("\nConvert successful to TFRecord.")
-

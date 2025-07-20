@@ -19,7 +19,8 @@ from config import (
     TRAINED_MODEL_SAVE_PATH,
     CURRENT_GENERATION_DATA_SUBDIR,
     EPOCHS,
-    BATCH_SIZE
+    BATCH_SIZE,
+    learning_rate
 )
 
 def _parse_function(example_proto):
@@ -130,8 +131,8 @@ if __name__ == "__main__":
     total_train_samples = count_tfrecord_samples(train_tfrecord_files)
     total_val_samples = count_tfrecord_samples(val_tfrecord_files)
 
-    total_train_samples *= 4
-    total_val_samples *= 4
+    total_train_samples *= 8
+    total_val_samples *= 8
 
     if total_train_samples == 0:
         print("No train samples")
@@ -142,7 +143,7 @@ if __name__ == "__main__":
 
     model = create_dual_resnet_model()
 
-    initial_learning_rate = 0.0005
+    initial_learning_rate = learning_rate
     steps_per_epoch = math.ceil(total_train_samples / BATCH_SIZE)
     decay_steps = steps_per_epoch * EPOCHS
 

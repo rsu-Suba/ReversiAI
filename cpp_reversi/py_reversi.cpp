@@ -46,7 +46,10 @@ PYBIND11_MODULE(reversi_bitboard_cpp, m) {
         .def("get_winner", &ReversiBitboard::get_winner)
         .def("count_set_bits", &ReversiBitboard::count_set_bits)
         .def("get_legal_moves", &ReversiBitboard::get_legal_moves)
-        .def("board_to_numpy", &ReversiBitboard::board_to_numpy)
+        .def("board_to_numpy", [](const ReversiBitboard& self) {
+            std::vector<int8_t> board_vec = self.board_to_numpy();
+            return py::array_t<int8_t>(board_vec.size(), board_vec.data());
+        })
         .def("board_to_input_planes", [](const ReversiBitboard& self, int current_player) {
             std::vector<int8_t> board_1d = self.board_to_numpy();
             py::array_t<float> player_plane = py::array_t<float>({8, 8});

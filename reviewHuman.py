@@ -13,7 +13,8 @@ from config import (
     TRAINED_MODEL_SAVE_PATH,
     NUM_GAMES_COMPARE,
     SIMS_N,
-    Model_Path
+    Model_Path,
+    C_PUCT
 )
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__))))

@@ -247,8 +247,13 @@ def run_comparison(model1_path, model1_name, model2_path, model2_name, num_games
 
     print(f"\nStart simulation -> {num_games}")
     for i in range(num_games):
-        p1, p2 = ai1, ai2
-        p1_name, p2_name = ai1.name, ai2.name
+        if i % 2 == 0:
+            p1, p2 = ai1, ai2
+            p1_name, p2_name = ai1.name, ai2.name
+        else:
+            p1, p2 = ai2, ai1
+            p1_name, p2_name = ai2.name, ai1.name
+
         winner, black_count, white_count, p1_q_values, p2_q_values = simulate_game(p1, p2, verbose=game_verbose)
 
         if p1 == ai1:
@@ -258,11 +263,11 @@ def run_comparison(model1_path, model1_name, model2_path, model2_name, num_games
             all_q_values_ai1.extend(p2_q_values)
             all_q_values_ai2.extend(p1_q_values)
 
-        if winner == 1:
+        if winner == 1: # Player 1 is always Black
             wins[p1_name] += 1
             total_stones[p1_name] += black_count
             total_stones[p2_name] += white_count
-        elif winner == 2:
+        elif winner == 2: # Player 2 is always White
             wins[p2_name] += 1
             total_stones[p1_name] += black_count
             total_stones[p2_name] += white_count
