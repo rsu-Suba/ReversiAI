@@ -3,15 +3,27 @@
    <head>
       <meta charset="UTF-8" />
       <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-      <title>Othello AI</title>
+      <title>Reversi AI</title>
       <link rel="stylesheet" href="style.css" />
+      <link rel="icon" href="favicon.ico">
    </head>
    <body>
-      <h1>Othello AI</h1>
-      <div id="game-board"></div>
-      <div id="status-message">Loading AI...</div>
-      <button id="reset-button">New Game</button>
-
+      <div id="game-container">
+         <div id="board"></div>
+         <div id="game-info">
+            <p>Turn: <span id="current-player"></span></p>
+            <p>Black: <span id="black-score"></span></p>
+            <p>White: <span id="white-score"></span></p>
+            <div id="game-message" class="message"></div>
+            <button id="reset-button">Reset Game</button>
+         </div>
+      </div>
+      <p class="dev-text">
+         Model : 17 (Jul 25 '25)<br />
+         Generate : Gemini 2.5 Pro<br>
+         <a href="https://github.com/rsu-Suba/ReversiAI">Github Repo</a>
+      </p>
+      <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@latest/dist/tf.min.js"></script>
       <script type="module" src="main.js"></script>
    </body>
 </html>

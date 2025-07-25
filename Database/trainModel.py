@@ -5,7 +5,25 @@ import math
 import glob
 import json
 import tensorflow as tf
-from tensorflow.keras.callbacks import EarlyStopping
+from tensorflow.keras.callbacks import Callback, EarlyStopping, ReduceLROnPlateau
+
+class RealTimeMetricsLogger(Callback):
+    def __init__(self, filepath):
+        super(RealTimeMetricsLogger, self).__init__()
+        self.filepath = filepath
+        self.metrics_history = []
+        with open(self.filepath, 'w') as f:
+            json.dump([], f)
+
+    def on_epoch_end(self, epoch, logs=None):
+        logs = logs or {}
+        logs['lr'] = self.model.optimizer.lr.numpy()
+        logs['epoch'] = epoch + 1
+        serializable_logs = {k: float(v) for k, v in logs.items()}
+        self.metrics_history.append(serializable_logs)
+        with open(self.filepath, 'w') as f:
+            json.dump(self.metrics_history, f, indent=4)
+
 from tensorflow.keras.optimizers.schedules import CosineDecay
 from tensorflow.keras import mixed_precision
 from tqdm import tqdm
@@ -22,6 +40,8 @@ from config import (
     BATCH_SIZE,
     learning_rate
 )
+
+REALTIME_METRICS_FILE = "realtime_training_metrics.json"
 
 def _parse_function(example_proto):
     feature_description = {
@@ -147,26 +167,27 @@ if __name__ == "__main__":
     steps_per_epoch = math.ceil(total_train_samples / BATCH_SIZE)
     decay_steps = steps_per_epoch * EPOCHS
 
-    lr_schedule = CosineDecay(
-        initial_learning_rate=initial_learning_rate,
-        decay_steps=decay_steps,
-        alpha=0.00001
-    )
+    # lr_schedule = CosineDecay(
+    #     initial_learning_rate=initial_learning_rate,
+    #     decay_steps=decay_steps,
+    #     alpha=0.000005
+    # )
 
     model.compile(
-        optimizer=tf.keras.optimizers.Adam(learning_rate=lr_schedule, clipnorm=1.0),
+        optimizer=tf.keras.optimizers.Adam(learning_rate=initial_learning_rate, clipnorm=1.0),
         loss={
-            'policy_output': tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.1),
+            'policy_output': tf.keras.losses.CategoricalCrossentropy(label_smoothing=0.02151807979109035),
             'value_output': 'mean_squared_error'
         },
-        loss_weights={'policy_output': 1.0, 'value_output': 1.0},
+        loss_weights={'policy_output': 1.0, 'value_output': 0.851679988560837},
         metrics={
             'policy_output': [tf.keras.metrics.KLDivergence(name='kl_divergence'), tf.keras.metrics.TopKCategoricalAccuracy(k=5, name='top_5_accuracy')],
             'value_output': 'mean_absolute_error'
         }
     )
 
-    early_stopping = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True, verbose=1)
+    early_stopping = EarlyStopping(monitor='val_loss', patience=5, restore_best_weights=True, verbose=1)
+    reduce_lr = ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=1, min_lr=0.00001, verbose=1)
 
     print("\n--- Train start ---")
     history = model.fit(
@@ -175,7 +196,7 @@ if __name__ == "__main__":
         steps_per_epoch=steps_per_epoch,
         validation_data=val_dataset,
         validation_steps=math.ceil(total_val_samples / BATCH_SIZE),
-        callbacks=[early_stopping]
+        callbacks=[early_stopping]# , reduce_lr]
     )
 
     print("\n--- Train finish -> Save new model ---")

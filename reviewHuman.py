@@ -6,20 +6,14 @@ import tensorflow as tf
 import math
 from reversi_bitboard_cpp import ReversiBitboard
 from config import (
-    MODELS_DIR,
-    TRAINING_DATA_DIR,
-    SELF_PLAY_MODEL_PATH,
-    CURRENT_GENERATION_DATA_SUBDIR,
-    TRAINED_MODEL_SAVE_PATH,
-    NUM_GAMES_COMPARE,
-    SIMS_N,
+    R_SIMS_N,
     Model_Path,
     C_PUCT
 )
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__))))
 
-MCTS_SIMS_PER_MOVE = SIMS_N
+MCTS_SIMS_PER_MOVE = R_SIMS_N
 MODEL_PATH = Model_Path
 
 def board_to_input_planes_tf(board_1d_tf, current_player_tf):

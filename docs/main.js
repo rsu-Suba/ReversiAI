@@ -1,178 +1,160 @@
-// main.js (Webアプリ版・最終完成形)
+import { OthelloBoard } from "./js/OthelloBoard.mjs";
 
-import { OthelloBoard } from "..//OthelloBoard.mjs";
-import { MCTS } from "../MCTS.mjs";
-import { MCTSNode } from "../MCTSNode.mjs";
-
-// --- 初期設定 ---
-const MCTS_SIMS_PER_MOVE = 500; // スマホの負荷を考慮し、シミュレーション回数を調整
-const AI_THINKING_TIME_MS = 5; // AIが手を打つ前の待機時間（見栄えのため）
-
-// --- DOM要素の取得 ---
-const boardElement = document.getElementById("game-board");
-const messageElement = document.getElementById("status-message");
+const boardElement = document.getElementById("board");
+const currentPlayerSpan = document.getElementById("current-player");
+const blackScoreSpan = document.getElementById("black-score");
+const whiteScoreSpan = document.getElementById("white-score");
+const gameMessage = document.getElementById("game-message");
 const resetButton = document.getElementById("reset-button");
 
-// --- グローバル変数 ---
-let board;
-let mctsAI;
-let humanPlayer; // 1: 黒, -1: 白
-let isGameActive = false;
-let isAiThinking = false;
+let gameBoard;
+let aiModel;
+let humanPlayer;
 
-// --- メインの実行部分 ---
-async function initializeApp() {
-   messageElement.textContent = "Loading AI Brain (this may take a moment)...";
+async function initGame() {
+   await tf.ready();
+   gameBoard = new OthelloBoard();
+   await loadModel();
 
-   try {
-      // 1. AIの頭脳データを読み込む
-      const response = await fetch("../mcts.json");
-      if (!response.ok) throw new Error("Could not load mcts_data.json");
-      const dbData = await response.json();
+   humanPlayer = Math.random() < 0.5 ? 1 : 2;
+   gameBoard.currentPlayer = 1;
 
-      // 2.【最重要】ブラウザ用の「偽のデータベース管理者」を作成
-      const dbMock = new Map();
-      for (const row of dbData) {
-         // JSONの文字列データを、AIが使えるBigIntや正しいデータ型に変換して格納
-         const nodeData = {
-            key: row.key,
-            parent_key: row.parent_key,
-            move: row.move ? BigInt(row.move) : null,
-            wins: Number(row.wins),
-            visits: Number(row.visits),
-            children_keys: JSON.parse(row.children_keys),
-            blackBoard: BigInt("0x" + row.black_board),
-            whiteBoard: BigInt("0x" + row.white_board),
-            currentPlayer: Number(row.current_player),
-         };
-         dbMock.set(nodeData.key, nodeData);
-      }
+   renderBoard();
+   updateGameInfo();
 
-      const dbManagerMock = {
-         getNode: async (key) => dbMock.get(key),
-         saveNode: async (node) => {
-            /* Web版では保存しない */
-         },
-         batchUpdateNodes: async (nodes) => {
-            /* Web版では保存しない */
-         },
-      };
-
-      // 3. 偽のDB管理者を使ってAIを初期化
-      // コンストラクタを MCTS(dbManager, cP, rng) に合わせる
-      mctsAI = new MCTS(dbManagerMock, 1.414, Math.random);
-
-      // 4. ゲームを開始
-      startNewGame();
-   } catch (error) {
-      console.error("Failed to initialize app:", error);
-      messageElement.textContent = "Error: AI data could not be loaded.";
+   if (gameBoard.currentPlayer !== humanPlayer) {
+      setTimeout(makeAIMove, 500);
    }
 }
 
-function startNewGame() {
-   board = new OthelloBoard();
-   humanPlayer = Math.random() < 0.5 ? 1 : -1;
-   isGameActive = true;
-   isAiThinking = false;
-   renderBoard();
-
-   // 最初のターンがAIなら、思考を促す
-   if (board.currentPlayer !== humanPlayer) {
-      setTimeout(requestAiMove, AI_THINKING_TIME_MS);
-   }
+async function loadModel() {
+   console.log("Loading AI model...");
+   aiModel = await tf.loadGraphModel("./tfjs_model/model.json");
+   console.log("AI model loaded.");
 }
 
 function renderBoard() {
    boardElement.innerHTML = "";
-   const legalMoves = board.getLegalMoves();
+   const blackPieces = gameBoard.blackBoard;
+   const whitePieces = gameBoard.whiteBoard;
+   const legalMoves = gameBoard.getLegalMoves();
 
-   for (let r = 0; r < 8; r++) {
-      for (let c = 0; c < 8; c++) {
-         const square = document.createElement("div");
-         square.className = "square";
-         const bit = 1n << BigInt(r * 8 + c);
+   for (let i = 0; i < gameBoard.BOARD_SIZE; i++) {
+      const cell = document.createElement("div");
+      cell.classList.add("cell");
+      cell.dataset.index = i;
 
-         if ((board.blackBoard & bit) !== 0n) {
-            const disc = document.createElement("div");
-            disc.className = "disc black";
-            square.appendChild(disc);
-         } else if ((board.whiteBoard & bit) !== 0n) {
-            const disc = document.createElement("div");
-            disc.className = "disc white";
-            square.appendChild(disc);
-         } else if (isGameActive && board.currentPlayer === humanPlayer) {
-            const isLegal = legalMoves.some((move) => move[0] === r && move[1] === c);
-            if (isLegal) {
-               square.classList.add("legal");
-               square.onclick = () => handleHumanMove(r, c);
-            }
+      if ((blackPieces >> BigInt(i)) & 1n) {
+         const piece = document.createElement("div");
+         piece.classList.add("piece", "black");
+         cell.appendChild(piece);
+      } else if ((whitePieces >> BigInt(i)) & 1n) {
+         const piece = document.createElement("div");
+         piece.classList.add("piece", "white");
+         cell.appendChild(piece);
+      }
+
+      if (legalMoves.includes(i)) {
+         if (gameBoard.currentPlayer === humanPlayer) {
+            cell.classList.add("valid-move");
+            cell.addEventListener("click", () => handleMove(i));
          }
-         boardElement.appendChild(square);
+      }
+
+      boardElement.appendChild(cell);
+   }
+}
+
+function updateGameInfo() {
+   const currentPlayerName = gameBoard.currentPlayer === 1 ? "Black" : "White";
+   const humanPlayerName = humanPlayer === 1 ? "Black (You)" : "White (You)";
+   const aiPlayerName = humanPlayer === 1 ? "White (AI)" : "Black (AI)";
+
+   currentPlayerSpan.textContent = `${
+      gameBoard.currentPlayer === humanPlayer ? "Player" : "AI"
+   } (${currentPlayerName})`;
+   blackScoreSpan.textContent = gameBoard.countSetBits(gameBoard.blackBoard);
+   whiteScoreSpan.textContent = gameBoard.countSetBits(gameBoard.whiteBoard);
+
+   gameMessage.textContent = "";
+
+   if (gameBoard.isGameOver()) {
+      const winner = gameBoard.getWinner();
+      let message = "";
+      if (winner === 1) {
+         message = `${humanPlayer === 1 ? "You" : "AI"} wins`;
+      } else if (winner === 2) {
+         message = `${humanPlayer === 1 ? "AI" : "You"} wins`;
+      } else {
+         message = "Draw";
+      }
+      gameMessage.textContent = message;
+   } else if (gameBoard.getLegalMoves().length === 0) {
+      const tempBoard = new OthelloBoard();
+      tempBoard.blackBoard = gameBoard.blackBoard;
+      tempBoard.whiteBoard = gameBoard.whiteBoard;
+      tempBoard.currentPlayer = 3 - gameBoard.currentPlayer;
+
+      if (tempBoard.getLegalMoves().length === 0) {
+         gameBoard.isGameOver();
+         updateGameInfo();
+      } else {
+         gameMessage.textContent = `${currentPlayerName} has no legal moves. Passing turn.`;
+         gameBoard.applyMove(-1);
+         renderBoard();
+         updateGameInfo();
+         if (gameBoard.currentPlayer !== humanPlayer) {
+            setTimeout(makeAIMove, 0);
+         }
       }
    }
-   updateStatus();
-   board.display();
 }
 
-function handleHumanMove(r, c) {
-   if (!isGameActive || isAiThinking) return;
-
-   const moveBit = BigInt(r * 8 + c);
-   board.applyMove(moveBit);
-   renderBoard();
-
-   setTimeout(requestAiMove, AI_THINKING_TIME_MS);
-}
-
-async function requestAiMove() {
-   if (!isGameActive || board.isGameOver()) return;
-
-   isAiThinking = true;
-   messageElement.textContent = "AI is thinking...";
-
-   // AIに思考させる
-   const legalMoves = board.getLegalMoves();
-   if (legalMoves.length === 0) {
-      board.applyMove(null);
-      isAiThinking = false;
+async function handleMove(move) {
+   if (gameBoard.currentPlayer === humanPlayer) {
+      gameBoard.applyMove(move);
       renderBoard();
-      return;
-   }
-
-   const aiMoveBit = await mctsAI.run(board.blackBoard, board.whiteBoard, board.currentPlayer, MCTS_SIMS_PER_MOVE);
-
-   board.applyMove(aiMoveBit);
-   isAiThinking = false;
-   renderBoard();
-
-   // 次が人間の手番で、パスしかない場合は、自動でパス処理
-   if (board.currentPlayer === humanPlayer && !board.isGameOver() && board.getLegalMoves().length === 0) {
-      messageElement.textContent = "You have no moves. Passing turn...";
-      setTimeout(() => {
-         board.applyMove(null);
-         requestAiMove();
-      }, 1500);
+      updateGameInfo();
+      if (!gameBoard.isGameOver() && gameBoard.currentPlayer !== humanPlayer) {
+         setTimeout(makeAIMove, 0);
+      }
    }
 }
 
-function updateStatus() {
-   if (!isGameActive) return;
-   if (board.isGameOver()) {
-      isGameActive = false;
-      const scores = board.getScores();
-      const winner = board.getWinner();
-      let msg = `Game Over! Score Black:${scores.black} White:${scores.white}. `;
-      if (winner === 0) msg += "Draw!";
-      else if (winner === humanPlayer) msg += "You Win!";
-      else msg += "AI Wins!";
-      messageElement.textContent = msg;
+async function makeAIMove() {
+   if (gameBoard.isGameOver()) return;
+
+   console.log("AI is thinking...");
+   const inputTensor = tf.tensor4d([gameBoard.boardToInputPlanes()], [1, 8, 8, 2], "float32");
+   const predictions = aiModel.predict(inputTensor);
+   const policyOutput = predictions[1].dataSync();
+
+   const legalMoves = gameBoard.getLegalMoves();
+   let bestMove = -1;
+   let maxPolicy = -1;
+
+   for (const move of legalMoves) {
+      if (policyOutput[move] > maxPolicy) {
+         maxPolicy = policyOutput[move];
+         bestMove = move;
+      }
+   }
+
+   if (bestMove !== -1) {
+      gameBoard.applyMove(bestMove);
+      renderBoard();
+      updateGameInfo();
    } else {
-      messageElement.textContent = `${board.currentPlayer === humanPlayer ? "Your" : "AI"}'s turn (${
-         board.currentPlayer === 1 ? "Black" : "White"
-      })`;
+      console.warn("AI could not find a legal move. Passing turn.");
+      gameBoard.applyMove(-1);
+      renderBoard();
+      updateGameInfo();
    }
 }
 
-resetButton.onclick = startNewGame;
-initializeApp();
+resetButton.addEventListener("click", () => {
+   gameBoard.reset();
+   initGame();
+});
+
+initGame();

@@ -4,11 +4,6 @@ import os
 import math
 import time
 from config import (
-    MODELS_DIR,
-    TRAINING_DATA_DIR,
-    SELF_PLAY_MODEL_PATH,
-    CURRENT_GENERATION_DATA_SUBDIR,
-    TRAINED_MODEL_SAVE_PATH,
     NUM_GAMES_COMPARE,
     SIMS_N,
     Model1_Path,
@@ -263,11 +258,11 @@ def run_comparison(model1_path, model1_name, model2_path, model2_name, num_games
             all_q_values_ai1.extend(p2_q_values)
             all_q_values_ai2.extend(p1_q_values)
 
-        if winner == 1: # Player 1 is always Black
+        if winner == 1:
             wins[p1_name] += 1
             total_stones[p1_name] += black_count
             total_stones[p2_name] += white_count
-        elif winner == 2: # Player 2 is always White
+        elif winner == 2:
             wins[p2_name] += 1
             total_stones[p1_name] += black_count
             total_stones[p2_name] += white_count

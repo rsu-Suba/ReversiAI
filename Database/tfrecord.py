@@ -36,8 +36,10 @@ def board_to_input_planes_tf(board_1d_tf, current_player_tf):
     player_plane = tf.zeros((8, 8), dtype=tf.float32)
     opponent_plane = tf.zeros((8, 8), dtype=tf.float32)
     board_2d_tf = tf.reshape(board_1d_tf, (8, 8))
-    current_player_mask = tf.cast(tf.equal(board_2d_tf, current_player_tf), tf.float32)
-    opponent_player_mask = tf.cast(tf.equal(board_2d_tf, 3 - current_player_tf), tf.float32)
+    current_player_tf_int8 = tf.cast(current_player_tf, tf.int8)
+
+    current_player_mask = tf.cast(tf.equal(board_2d_tf, current_player_tf_int8), tf.float32)
+    opponent_player_mask = tf.cast(tf.equal(board_2d_tf, 3 - current_player_tf_int8), tf.float32)
     player_plane += current_player_mask
     opponent_plane += opponent_player_mask
     return tf.stack([player_plane, opponent_plane], axis=-1)
@@ -51,7 +53,6 @@ def process_and_write_file(args):
             with open(msgpack_path, 'rb') as f:
                 unpacker = msgpack.Unpacker(f, raw=False, use_list=True)
                 for game_history in unpacker:
-                    # game_history is now a list of dicts, not a single root_node_dict
                     if not game_history: continue
 
                     for record in game_history:
@@ -60,7 +61,6 @@ def process_and_write_file(args):
                         policy_np = np.array(record['policy'], dtype=np.float32)
                         value = record['value']
 
-                        # Convert numpy arrays to TensorFlow tensors
                         board_tf = tf.convert_to_tensor(board_np, dtype=tf.int8)
                         player_tf = tf.convert_to_tensor(player, dtype=tf.int32)
                         policy_tf = tf.convert_to_tensor(policy_np, dtype=tf.float32)
@@ -99,7 +99,6 @@ if __name__ == "__main__":
     for old_file in glob.glob(os.path.join(val_output_dir, "*.tfrecord")): os.remove(old_file)
     print(f"Deleted old tfrecord -> {train_output_dir}, {val_output_dir}")
 
-    # Change glob pattern to match new data file names
     msgpack_files = glob.glob(os.path.join(source_dir, 'mcts_tree_*.msgpack'))
     if not msgpack_files:
         print(f"No msgpack ->{source_dir}")

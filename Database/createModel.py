@@ -33,7 +33,7 @@ def create_dual_resnet_model(input_shape=(8, 8, 2), num_residual_blocks=5):
     value_head = layers.ReLU()(value_head)
     value_head = layers.Flatten()(value_head)
     value_head = layers.Dense(64, activation='relu')(value_head)
-    value_head = layers.Dense(1, activation='tanh', name='value_output', dtype='float32')(value_head)
+    value_head = layers.Dense(1, activation='relu', name='value_output', dtype='float32')(value_head)
 
     model = models.Model(inputs=inputs, outputs=[policy_head, value_head])
 

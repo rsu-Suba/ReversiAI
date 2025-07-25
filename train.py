@@ -48,30 +48,22 @@ from config import (
 )
 
 def board_to_input_planes_tf(board_1d_batch_tf, current_player_batch_tf):
-    # board_1d_batch_tf: [batch_size, 64]
-    # current_player_batch_tf: [batch_size]
-
     batch_size = tf.shape(board_1d_batch_tf)[0]
-
     player_plane = tf.zeros((batch_size, 8, 8), dtype=tf.float32)
     opponent_plane = tf.zeros((batch_size, 8, 8), dtype=tf.float32)
-
     board_2d_batch_tf = tf.reshape(board_1d_batch_tf, (batch_size, 8, 8))
-
-    # current_player_batch_tfを[batch_size, 1, 1]に拡張してブロードキャスト可能にする
     current_player_batch_expanded = tf.expand_dims(tf.expand_dims(current_player_batch_tf, -1), -1)
-
     current_player_mask = tf.cast(tf.equal(board_2d_batch_tf, current_player_batch_expanded), tf.float32)
     opponent_player_mask = tf.cast(tf.equal(board_2d_batch_tf, 3 - current_player_batch_expanded), tf.float32)
 
     player_plane += current_player_mask
     opponent_plane += opponent_player_mask
 
-    return tf.stack([player_plane, opponent_plane], axis=-1) # Result shape: [batch_size, 8, 8, 2]
+    return tf.stack([player_plane, opponent_plane], axis=-1)
 
 class ModelWrapper:
     def __init__(self, model_path):
-        self.model = tf.keras.models.load_model(model_path)
+        self.model = tf.keras.models.load_model(model_path, compile=False)
         self._predict_internal_cpp = tf.function(
             self._predict_for_cpp,
             input_signature=[
@@ -100,7 +92,7 @@ def run_self_play_game_worker(game_id, model_path, sims_n, c_puct):
 
     game_board = ReversiBitboard()
     game_board.history = []
-    current_player = 1 # Black always starts for simplicity in data collection
+    current_player = 1
     game_board.current_player = current_player
 
     mcts_ai = MCTS_CPP(model_wrapper, c_puct=c_puct, batch_size=MCTS_PREDICT_BATCH_SIZE)
@@ -110,14 +102,13 @@ def run_self_play_game_worker(game_id, model_path, sims_n, c_puct):
     while not game_board.is_game_over():
         legal_moves = game_board.get_legal_moves()
         if not legal_moves:
-            game_board.apply_move(-1) # Pass
+            game_board.apply_move(-1)
             current_player = game_board.current_player
             continue
 
         add_noise = len(game_board.history) < 30
         root_node = mcts_ai.search(game_board, current_player, sims_n, add_noise)
 
-        # Create policy target from visit counts
         policy_target = np.zeros(64, dtype=np.float32)
         if root_node.children:
             total_visits = 0
@@ -133,9 +124,7 @@ def run_self_play_game_worker(game_id, model_path, sims_n, c_puct):
             'policy': policy_target.tolist()
         })
 
-        # Choose move
         if len(game_board.history) < 30:
-            # Probabilistic move choice
             moves = list(root_node.children.keys())
             visits = [child.n_visits for child in root_node.children.values()]
             if sum(visits) == 0:
@@ -144,7 +133,6 @@ def run_self_play_game_worker(game_id, model_path, sims_n, c_puct):
                 probabilities = np.array(visits, dtype=np.float32) / sum(visits)
                 best_move = np.random.choice(moves, p=probabilities)
         else:
-            # Deterministic move choice
             best_move = max(root_node.children.items(), key=lambda item: item[1].n_visits)[0]
 
         game_board.apply_move(best_move)
@@ -152,9 +140,6 @@ def run_self_play_game_worker(game_id, model_path, sims_n, c_puct):
 
     winner = game_board.get_winner()
     print(f"G{game_id}: Game finish, winner: {winner}")
-    _print_numpy_board(game_board.board_to_numpy())
-
-    # Assign final value to all states in the history
     for record in game_history:
         if winner == 0:
             record['value'] = 0.0
