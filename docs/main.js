@@ -5,6 +5,7 @@ const currentPlayerSpan = document.getElementById("current-player");
 const blackScoreSpan = document.getElementById("black-score");
 const whiteScoreSpan = document.getElementById("white-score");
 const gameMessage = document.getElementById("game-message");
+const tempMessage = document.getElementById("temp-message");
 const resetButton = document.getElementById("reset-button");
 
 let gameBoard;
@@ -99,15 +100,24 @@ function updateGameInfo() {
          gameBoard.isGameOver();
          updateGameInfo();
       } else {
-         gameMessage.textContent = `${currentPlayerName} has no legal moves. Passing turn.`;
+         const passedPlayerName = gameBoard.currentPlayer === humanPlayer ? "Player" : "AI";
+         showTempMessage(`${passedPlayerName} passed!`);
          gameBoard.applyMove(-1);
          renderBoard();
          updateGameInfo();
          if (gameBoard.currentPlayer !== humanPlayer) {
-            setTimeout(makeAIMove, 0);
+            setTimeout(makeAIMove, 500);
          }
       }
    }
+}
+
+function showTempMessage(message) {
+   tempMessage.textContent = message;
+   tempMessage.classList.add('show');
+   setTimeout(() => {
+      tempMessage.classList.remove('show');
+   }, 1500);
 }
 
 async function handleMove(move) {
@@ -123,33 +133,34 @@ async function handleMove(move) {
 
 async function makeAIMove() {
    if (gameBoard.isGameOver()) return;
-
    console.log("AI is thinking...");
-   const inputTensor = tf.tensor4d([gameBoard.boardToInputPlanes()], [1, 8, 8, 2], "float32");
-   const predictions = aiModel.predict(inputTensor);
-   const policyOutput = predictions[1].dataSync();
+   setTimeout(async () => {
+      const inputTensor = tf.tensor4d([gameBoard.boardToInputPlanes()], [1, 8, 8, 2], "float32");
+      const predictions = aiModel.predict(inputTensor);
+      const policyOutput = predictions[1].dataSync();
 
-   const legalMoves = gameBoard.getLegalMoves();
-   let bestMove = -1;
-   let maxPolicy = -1;
+      const legalMoves = gameBoard.getLegalMoves();
+      let bestMove = -1;
+      let maxPolicy = -1;
 
-   for (const move of legalMoves) {
-      if (policyOutput[move] > maxPolicy) {
-         maxPolicy = policyOutput[move];
-         bestMove = move;
+      for (const move of legalMoves) {
+         if (policyOutput[move] > maxPolicy) {
+            maxPolicy = policyOutput[move];
+            bestMove = move;
+         }
       }
-   }
 
-   if (bestMove !== -1) {
-      gameBoard.applyMove(bestMove);
-      renderBoard();
-      updateGameInfo();
-   } else {
-      console.warn("AI could not find a legal move. Passing turn.");
-      gameBoard.applyMove(-1);
-      renderBoard();
-      updateGameInfo();
-   }
+      if (bestMove !== -1) {
+         gameBoard.applyMove(bestMove);
+         renderBoard();
+         updateGameInfo();
+      } else {
+         console.warn("AI could not find a legal move. Passing turn.");
+         gameBoard.applyMove(-1);
+         renderBoard();
+         updateGameInfo();
+      }
+   }, 400);
 }
 
 resetButton.addEventListener("click", () => {
