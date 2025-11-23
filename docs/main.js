@@ -106,7 +106,7 @@ function updateGameInfo() {
          renderBoard();
          updateGameInfo();
          if (gameBoard.currentPlayer !== humanPlayer) {
-            setTimeout(makeAIMove, 300);
+            setTimeout(makeAIMove, 500);
          }
       }
    }
@@ -117,15 +117,12 @@ function showTempMessage(message) {
    tempMessage.classList.add('show');
    setTimeout(() => {
       tempMessage.classList.remove('show');
-   }, 700);
+   }, 1500);
 }
 
 async function handleMove(move) {
    if (gameBoard.currentPlayer === humanPlayer) {
       gameBoard.applyMove(move);
-      console.log('Human Move Applied:', move);
-      console.log('Black Board:', gameBoard.blackBoard.toString(2).padStart(64, '0'));
-      console.log('White Board:', gameBoard.whiteBoard.toString(2).padStart(64, '0'));
       renderBoard();
       updateGameInfo();
       if (!gameBoard.isGameOver() && gameBoard.currentPlayer !== humanPlayer) {
@@ -155,21 +152,15 @@ async function makeAIMove() {
 
       if (bestMove !== -1) {
          gameBoard.applyMove(bestMove);
-         console.log('AI Move Applied:', bestMove);
-         console.log('Black Board:', gameBoard.blackBoard.toString(2).padStart(64, '0'));
-         console.log('White Board:', gameBoard.whiteBoard.toString(2).padStart(64, '0'));
          renderBoard();
          updateGameInfo();
       } else {
          console.warn("AI could not find a legal move. Passing turn.");
          gameBoard.applyMove(-1);
-         console.log('AI Passed:');
-         console.log('Black Board:', gameBoard.blackBoard.toString(2).padStart(64, '0'));
-         console.log('White Board:', gameBoard.whiteBoard.toString(2).padStart(64, '0'));
          renderBoard();
          updateGameInfo();
       }
-   }, 250);
+   }, 400);
 }
 
 resetButton.addEventListener("click", () => {
